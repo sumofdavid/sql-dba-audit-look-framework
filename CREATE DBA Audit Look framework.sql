@@ -35,15 +35,15 @@ IF OBJECT_ID('DBA.LogSQLError','U') IS NULL
             [SQLErrorParameter] [int] NULL,
             [SQLErrorEventInfo] [nvarchar] (4000) NULL,
             [SQLErrorExtraInfo] [nvarchar] (4000) NULL,
-            [SQLErrorAnnounce] [int] NULL CONSTRAINT [df_dbo_LogSQLError_SQLErrorAnnounce] DEFAULT ((1)),
-            [CreatedDate] [datetimeoffset] NOT NULL CONSTRAINT [df_dbo_LogSQLError_CreatedDate] DEFAULT (sysdatetimeoffset()),
-            [CreatedBy] [nvarchar] (128) NOT NULL CONSTRAINT [df_dbo_LogSQLError_CreatedBy] DEFAULT (original_login()),
+            [SQLErrorAnnounce] [int] NULL CONSTRAINT [df_DBA_LogSQLError_SQLErrorAnnounce] DEFAULT ((1)),
+            [CreatedDate] [datetimeoffset] NOT NULL CONSTRAINT [df_DBA_LogSQLError_CreatedDate] DEFAULT (sysdatetimeoffset()),
+            [CreatedBy] [nvarchar] (128) NOT NULL CONSTRAINT [df_DBA_LogSQLError_CreatedBy] DEFAULT (original_login()),
             [CreatedByMachine] [nvarchar] (128) NULL
         );
 
-        CREATE CLUSTERED INDEX [clx_dbo_LogSQLError] ON [DBA].[LogSQLError] ([CreatedDate]);
-        CREATE NONCLUSTERED INDEX [ix_dbo_LogSQLError_SQLErrorProcedure] ON [DBA].[LogSQLError] ([SQLErrorProcedure]);
-        CREATE NONCLUSTERED INDEX [ix_dbo_LogSQLError_CreatedDate] ON [DBA].[LogSQLError] ([CreatedDate]);
+        CREATE CLUSTERED INDEX [clx_DBA_LogSQLError] ON [DBA].[LogSQLError] ([CreatedDate]);
+        CREATE NONCLUSTERED INDEX [ix_DBA_LogSQLError_SQLErrorProcedure] ON [DBA].[LogSQLError] ([SQLErrorProcedure]);
+        CREATE NONCLUSTERED INDEX [ix_DBA_LogSQLError_CreatedDate] ON [DBA].[LogSQLError] ([CreatedDate]);
     END
 
 IF OBJECT_ID('DBA.LogProcExec','U') IS NULL
@@ -51,9 +51,9 @@ IF OBJECT_ID('DBA.LogProcExec','U') IS NULL
         PRINT 'creating DBA.LogProcExec table';
         CREATE TABLE [DBA].[LogProcExec]
         (
-            [LogProcExecGID] [bigint] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_dbo_LogProcExec] PRIMARY KEY NONCLUSTERED,
-            [ProcExecVersion] [uniqueidentifier] NOT NULL CONSTRAINT [df_dbo_LogProcExec_ProcExecVersion] DEFAULT (newid()),
-            [ProcExecStartTime] [datetimeoffset] NOT NULL CONSTRAINT [df_dbo_LogProcExec_ProcExecStartTime] DEFAULT (sysdatetimeoffset()),
+            [LogProcExecGID] [bigint] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_DBA_LogProcExec] PRIMARY KEY NONCLUSTERED,
+            [ProcExecVersion] [uniqueidentifier] NOT NULL CONSTRAINT [df_DBA_LogProcExec_ProcExecVersion] DEFAULT (newid()),
+            [ProcExecStartTime] [datetimeoffset] NOT NULL CONSTRAINT [df_DBA_LogProcExec_ProcExecStartTime] DEFAULT (sysdatetimeoffset()),
             [ProcExecEndTime] [datetimeoffset] NULL,
             [DatabaseID] [int] NOT NULL,
             [ObjectID] [int] NOT NULL,
@@ -62,12 +62,12 @@ IF OBJECT_ID('DBA.LogProcExec','U') IS NULL
             [ProcText] [nvarchar] (4000) NULL,
             [RowsAffected] [int] NULL,
             [ExtraInfo] [nvarchar] (2000) NULL,
-            [CreatedBy] [nvarchar] (128) NOT NULL CONSTRAINT [df_dbo_LogProcExec_CreatedBy] DEFAULT (original_login()),
-            [CreatedByMachine] [nvarchar] (128) NULL CONSTRAINT [df_dbo_LogProcExec_CreatedByMachine] DEFAULT (host_name())
+            [CreatedBy] [nvarchar] (128) NOT NULL CONSTRAINT [df_DBA_LogProcExec_CreatedBy] DEFAULT (original_login()),
+            [CreatedByMachine] [nvarchar] (128) NULL CONSTRAINT [df_DBA_LogProcExec_CreatedByMachine] DEFAULT (host_name())
         );
 
-        CREATE CLUSTERED INDEX [clx_dbo_LogProcExec] ON [DBA].[LogProcExec] ([ProcExecStartTime]);
-        CREATE NONCLUSTERED INDEX [ix_dbo_LogProcExec_ProcName] ON [DBA].[LogProcExec] ([ProcName], [ProcSection]);
+        CREATE CLUSTERED INDEX [clx_DBA_LogProcExec] ON [DBA].[LogProcExec] ([ProcExecStartTime]);
+        CREATE NONCLUSTERED INDEX [ix_DBA_LogProcExec_ProcName] ON [DBA].[LogProcExec] ([ProcName], [ProcSection]);
 
     END
 
@@ -76,13 +76,13 @@ IF OBJECT_ID('DBA.TableLoadStatus','U') IS NULL
         PRINT 'creating DBA.TableLoadStatus table';
         CREATE TABLE DBA.TableLoadStatus
         (
-            TableLoadStatusGID int NOT NULL IDENTITY(1,1) CONSTRAINT pk_dba_TableLoadStatus PRIMARY KEY NONCLUSTERED,
+            TableLoadStatusGID int NOT NULL IDENTITY(1,1) CONSTRAINT pk_DBA_TableLoadStatus PRIMARY KEY NONCLUSTERED,
             TableName varchar(300) NOT NULL,
-            LoadTimestamp datetimeoffset NOT NULL CONSTRAINT df_dba_TableLoadStatus_LoadTimestamp DEFAULT (SYSDATETIMEOFFSET()),
-            ModifiedBy nvarchar(128) NOT NULL CONSTRAINT df_dba_TableLoadStatus_ModifiedBy DEFAULT (ORIGINAL_LOGIN())
+            LoadTimestamp datetimeoffset NOT NULL CONSTRAINT df_DBA_TableLoadStatus_LoadTimestamp DEFAULT (SYSDATETIMEOFFSET()),
+            ModifiedBy nvarchar(128) NOT NULL CONSTRAINT df_DBA_TableLoadStatus_ModifiedBy DEFAULT (ORIGINAL_LOGIN())
         );
 
-        CREATE UNIQUE CLUSTERED INDEX clx_dba_TableLoadStatus ON DBA.TableLoadStatus (TableName,LoadTimestamp);
+        CREATE UNIQUE CLUSTERED INDEX clx_DBA_TableLoadStatus ON DBA.TableLoadStatus (TableName,LoadTimestamp);
     END
 
 IF OBJECT_ID('dbo.LookType','U') IS NULL

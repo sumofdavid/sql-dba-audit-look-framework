@@ -140,16 +140,30 @@ IF OBJECT_ID('dbo.f_QuoteString','FN') IS NOT NULL
     END
 GO
 
-IF EXISTS (SELECT 0 FROM sys.schemas s WHERE s.name = 'Audit' AND schema_id NOT IN (SELECT schema_id FROM sys.objects WHERE name = 'Audit'))
+IF EXISTS (SELECT 1 FROM sys.objects WHERE [schema_id] = SCHEMA_ID('Audit'))
     BEGIN
-        PRINT 'dropping Audit schema';
-        EXEC('DROP SCHEMA [Audit]');
+        PRINT '*** There are still objects referenced by Audit schema, so schema will not be dropped';
+    END
+ELSE
+    BEGIN
+        IF EXISTS (SELECT 0 FROM sys.schemas s WHERE s.name = 'Audit' AND schema_id NOT IN (SELECT schema_id FROM sys.objects WHERE name = 'Audit'))
+            BEGIN
+                PRINT 'dropping Audit schema';
+                EXEC('DROP SCHEMA [Audit]');
+            END
     END
 GO 
 
-IF EXISTS (SELECT 0 FROM sys.schemas s WHERE s.name = 'DBA' AND schema_id NOT IN (SELECT schema_id FROM sys.objects WHERE name = 'DBA'))
+IF EXISTS (SELECT 1 FROM sys.objects WHERE [schema_id] = SCHEMA_ID('DBA'))
     BEGIN
-        PRINT 'dropping DBA schema';
-        EXEC('DROP SCHEMA [DBA]');
+        PRINT '*** There are still objects referenced by DBA schema, so schema will not be dropped';
+    END
+ELSE
+    BEGIN
+        IF EXISTS (SELECT 0 FROM sys.schemas s WHERE s.name = 'DBA' AND schema_id NOT IN (SELECT schema_id FROM sys.objects WHERE name = 'DBA'))
+            BEGIN
+                PRINT 'dropping DBA schema';
+                EXEC('DROP SCHEMA [DBA]');
+            END
     END
 GO 
