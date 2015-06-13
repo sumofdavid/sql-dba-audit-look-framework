@@ -1,144 +1,203 @@
 SET NUMERIC_ROUNDABORT OFF;
 SET ANSI_PADDING, ANSI_WARNINGS, CONCAT_NULL_YIELDS_NULL, ARITHABORT, QUOTED_IDENTIFIER, ANSI_NULLS ON;
-GO
+SET XACT_ABORT ON;
 
+-- ##########################################################
+-- Change version ##.##.## upon each and every change
+-- ##########################################################
+DECLARE @version nvarchar(100) = N'01.00.00',
+        @ext_version nvarchar(100);
+
+IF NOT EXISTS(SELECT 1 FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version')
+    BEGIN
+        EXEC sys.sp_addextendedproperty @name = N'audit version', @value = @version;
+    END
+ELSE
+    BEGIN
+        SELECT @ext_version = CONVERT(nvarchar(100),value) FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version';
+        IF @ext_version <> @version
+            BEGIN
+                RAISERROR(N'You must run upgrade script or drop audit objects',16,1);
+            END
+    END
+   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 PRINT '--- creating schemas'
-IF (NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'DBA')) 
+IF (NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'dba')) 
     BEGIN
-        PRINT 'create DBA schema';
-        EXEC ('CREATE SCHEMA [DBA] AUTHORIZATION [dbo]')
+        PRINT 'create dba schema';
+        EXEC ('CREATE SCHEMA [dba] AUTHORIZATION [dbo]')
     END
 
-IF (NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'Audit')) 
+IF (NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'base')) 
     BEGIN
-        PRINT 'create Audit schema';
-        EXEC ('CREATE SCHEMA [Audit] AUTHORIZATION [dbo]')
+        PRINT 'create base schema';
+        EXEC ('CREATE SCHEMA [base] AUTHORIZATION [dbo]')
+    END
+
+IF (NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'audit')) 
+    BEGIN
+        PRINT 'create audit schema';
+        EXEC ('CREATE SCHEMA [audit] AUTHORIZATION [dbo]')
     END
 
 PRINT '--- creating tables'
 
-IF OBJECT_ID('DBA.LogSQLError','U') IS NULL
+IF OBJECT_ID('audit.KVStore','U') IS NULL
     BEGIN
-        PRINT 'creating DBA.LogSQLError table';
-        CREATE TABLE [DBA].[LogSQLError]
-        (
-            [SQLErrorProcedure] [nvarchar] (128) NULL,
-            [SQLErrorLineNumber] [int] NULL,
-            [SQLErrorNumber] [int] NULL,
-            [SQLErrorMessage] [nvarchar] (2048) NULL,
-            [SQLErrorSeverity] [int] NULL,
-            [SQLErrorState] [int] NULL,
-            [SQLErrorProcedureSection] [nvarchar] (128) NULL,
-            [SQLErrorSPID] [int] NULL,
-            [SQLErrorEventType] [nvarchar] (30) NULL,
-            [SQLErrorParameter] [int] NULL,
-            [SQLErrorEventInfo] [nvarchar] (4000) NULL,
-            [SQLErrorExtraInfo] [nvarchar] (4000) NULL,
-            [SQLErrorAnnounce] [int] NULL CONSTRAINT [df_DBA_LogSQLError_SQLErrorAnnounce] DEFAULT ((1)),
-            [CreatedDate] [datetimeoffset] NOT NULL CONSTRAINT [df_DBA_LogSQLError_CreatedDate] DEFAULT (sysdatetimeoffset()),
-            [CreatedBy] [nvarchar] (128) NOT NULL CONSTRAINT [df_DBA_LogSQLError_CreatedBy] DEFAULT (original_login()),
-            [CreatedByMachine] [nvarchar] (128) NULL
+        CREATE TABLE [audit].[KVStore](
+	        [KVStoreGID] [uniqueidentifier] NOT NULL,
+	        [K] [varchar](100) NOT NULL,
+	        [V] [sql_variant] NOT NULL,
+	        [CreatedDate] [datetimeoffset](7) NOT NULL CONSTRAINT [df_audit_KVStore_CreatedDate]  DEFAULT (SYSDATETIMEOFFSET()),
+            CONSTRAINT [pk_audit_KVStore] PRIMARY KEY CLUSTERED 
+            (
+	            [KVStoreGID] ASC,
+	            [K] ASC
+            )
         );
-
-        CREATE CLUSTERED INDEX [clx_DBA_LogSQLError] ON [DBA].[LogSQLError] ([CreatedDate]);
-        CREATE NONCLUSTERED INDEX [ix_DBA_LogSQLError_SQLErrorProcedure] ON [DBA].[LogSQLError] ([SQLErrorProcedure]);
-        CREATE NONCLUSTERED INDEX [ix_DBA_LogSQLError_CreatedDate] ON [DBA].[LogSQLError] ([CreatedDate]);
     END
+    
+-- removed because of new EventSink table
+--IF OBJECT_ID('DBA.LogSQLError','U') IS NULL
+--    BEGIN
+--        PRINT 'creating DBA.LogSQLError table';
+--        CREATE TABLE [DBA].[LogSQLError]
+--        (
+--            [SQLErrorProcedure] [nvarchar] (128) NULL,
+--            [SQLErrorLineNumber] [int] NULL,
+--            [SQLErrorNumber] [int] NULL,
+--            [SQLErrorMessage] [nvarchar] (2048) NULL,
+--            [SQLErrorSeverity] [int] NULL,
+--            [SQLErrorState] [int] NULL,
+--            [SQLErrorProcedureSection] [nvarchar] (128) NULL,
+--            [SQLErrorSPID] [int] NULL,
+--            [SQLErrorEventType] [nvarchar] (30) NULL,
+--            [SQLErrorParameter] [int] NULL,
+--            [SQLErrorEventInfo] [nvarchar] (4000) NULL,
+--            [SQLErrorExtraInfo] [nvarchar] (4000) NULL,
+--            [SQLErrorAnnounce] [int] NULL CONSTRAINT [df_DBA_LogSQLError_SQLErrorAnnounce] DEFAULT ((1)),
+--            [CreatedDate] [datetimeoffset] NOT NULL CONSTRAINT [df_DBA_LogSQLError_CreatedDate] DEFAULT (sysdatetimeoffset()),
+--            [CreatedBy] [nvarchar] (128) NOT NULL CONSTRAINT [df_DBA_LogSQLError_CreatedBy] DEFAULT (original_login()),
+--            [CreatedByMachine] [nvarchar] (128) NULL
+--        );
 
-IF OBJECT_ID('DBA.LogProcExec','U') IS NULL
+--        CREATE CLUSTERED INDEX [clx_DBA_LogSQLError] ON [DBA].[LogSQLError] ([CreatedDate]);
+--        CREATE NONCLUSTERED INDEX [ix_DBA_LogSQLError_SQLErrorProcedure] ON [DBA].[LogSQLError] ([SQLErrorProcedure]);
+--        CREATE NONCLUSTERED INDEX [ix_DBA_LogSQLError_CreatedDate] ON [DBA].[LogSQLError] ([CreatedDate]);
+--    END
+
+-- removed because of new EventSink table
+--IF OBJECT_ID('DBA.LogProcExec','U') IS NULL
+--    BEGIN
+--        PRINT 'creating DBA.LogProcExec table';
+--        CREATE TABLE [DBA].[LogProcExec]
+--        (
+--            [LogProcExecGID] [bigint] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_DBA_LogProcExec] PRIMARY KEY NONCLUSTERED,
+--            [ProcExecVersion] [uniqueidentifier] NOT NULL CONSTRAINT [df_DBA_LogProcExec_ProcExecVersion] DEFAULT (newid()),
+--            [ProcExecStartTime] [datetimeoffset] NOT NULL CONSTRAINT [df_DBA_LogProcExec_ProcExecStartTime] DEFAULT (sysdatetimeoffset()),
+--            [ProcExecEndTime] [datetimeoffset] NULL,
+--            [DatabaseID] [int] NOT NULL,
+--            [ObjectID] [int] NOT NULL,
+--            [ProcName] [varchar] (300) NOT NULL,
+--            [ProcSection] [varchar] (300) NULL,
+--            [ProcText] [nvarchar] (4000) NULL,
+--            [RowsAffected] [int] NULL,
+--            [ExtraInfo] [nvarchar] (2000) NULL,
+--            [CreatedBy] [nvarchar] (128) NOT NULL CONSTRAINT [df_DBA_LogProcExec_CreatedBy] DEFAULT (original_login()),
+--            [CreatedByMachine] [nvarchar] (128) NULL CONSTRAINT [df_DBA_LogProcExec_CreatedByMachine] DEFAULT (host_name())
+--        );
+
+--        CREATE CLUSTERED INDEX [clx_DBA_LogProcExec] ON [DBA].[LogProcExec] ([ProcExecStartTime]);
+--        CREATE NONCLUSTERED INDEX [ix_DBA_LogProcExec_ProcName] ON [DBA].[LogProcExec] ([ProcName], [ProcSection]);
+
+--    END
+
+-- not implemented yet
+--IF OBJECT_ID('DBA.TableLoadStatus','U') IS NULL
+--    BEGIN
+--        PRINT 'creating DBA.TableLoadStatus table';
+--        CREATE TABLE DBA.TableLoadStatus
+--        (
+--            TableLoadStatusGID int NOT NULL IDENTITY(1,1) CONSTRAINT pk_DBA_TableLoadStatus PRIMARY KEY NONCLUSTERED,
+--            TableName varchar(300) NOT NULL,
+--            LoadTimestamp datetimeoffset NOT NULL CONSTRAINT df_DBA_TableLoadStatus_LoadTimestamp DEFAULT (SYSDATETIMEOFFSET()),
+--            ModifiedBy nvarchar(128) NOT NULL CONSTRAINT df_DBA_TableLoadStatus_ModifiedBy DEFAULT (ORIGINAL_LOGIN())
+--        );
+
+--        CREATE UNIQUE CLUSTERED INDEX clx_DBA_TableLoadStatus ON DBA.TableLoadStatus (TableName,LoadTimestamp);
+--    END
+
+IF OBJECT_ID('base.LookType','U') IS NULL
     BEGIN
-        PRINT 'creating DBA.LogProcExec table';
-        CREATE TABLE [DBA].[LogProcExec]
+        PRINT 'creating base.LookType table';
+
+        CREATE TABLE [base].[LookType]
         (
-            [LogProcExecGID] [bigint] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_DBA_LogProcExec] PRIMARY KEY NONCLUSTERED,
-            [ProcExecVersion] [uniqueidentifier] NOT NULL CONSTRAINT [df_DBA_LogProcExec_ProcExecVersion] DEFAULT (newid()),
-            [ProcExecStartTime] [datetimeoffset] NOT NULL CONSTRAINT [df_DBA_LogProcExec_ProcExecStartTime] DEFAULT (sysdatetimeoffset()),
-            [ProcExecEndTime] [datetimeoffset] NULL,
-            [DatabaseID] [int] NOT NULL,
-            [ObjectID] [int] NOT NULL,
-            [ProcName] [varchar] (300) NOT NULL,
-            [ProcSection] [varchar] (300) NULL,
-            [ProcText] [nvarchar] (4000) NULL,
-            [RowsAffected] [int] NULL,
-            [ExtraInfo] [nvarchar] (2000) NULL,
-            [CreatedBy] [nvarchar] (128) NOT NULL CONSTRAINT [df_DBA_LogProcExec_CreatedBy] DEFAULT (original_login()),
-            [CreatedByMachine] [nvarchar] (128) NULL CONSTRAINT [df_DBA_LogProcExec_CreatedByMachine] DEFAULT (host_name())
-        );
-
-        CREATE CLUSTERED INDEX [clx_DBA_LogProcExec] ON [DBA].[LogProcExec] ([ProcExecStartTime]);
-        CREATE NONCLUSTERED INDEX [ix_DBA_LogProcExec_ProcName] ON [DBA].[LogProcExec] ([ProcName], [ProcSection]);
-
-    END
-
-IF OBJECT_ID('DBA.TableLoadStatus','U') IS NULL
-    BEGIN
-        PRINT 'creating DBA.TableLoadStatus table';
-        CREATE TABLE DBA.TableLoadStatus
-        (
-            TableLoadStatusGID int NOT NULL IDENTITY(1,1) CONSTRAINT pk_DBA_TableLoadStatus PRIMARY KEY NONCLUSTERED,
-            TableName varchar(300) NOT NULL,
-            LoadTimestamp datetimeoffset NOT NULL CONSTRAINT df_DBA_TableLoadStatus_LoadTimestamp DEFAULT (SYSDATETIMEOFFSET()),
-            ModifiedBy nvarchar(128) NOT NULL CONSTRAINT df_DBA_TableLoadStatus_ModifiedBy DEFAULT (ORIGINAL_LOGIN())
-        );
-
-        CREATE UNIQUE CLUSTERED INDEX clx_DBA_TableLoadStatus ON DBA.TableLoadStatus (TableName,LoadTimestamp);
-    END
-
-IF OBJECT_ID('dbo.LookType','U') IS NULL
-    BEGIN
-        PRINT 'creating dbo.LookType table';
-
-        CREATE TABLE [dbo].[LookType]
-        (
-            [LookTypeGID] [smallint] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_dbo_LookType] PRIMARY KEY CLUSTERED,
+            [LookTypeGID] [smallint] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_base_LookType] PRIMARY KEY CLUSTERED,
             [LookTypeValue] [varchar] (500) NOT NULL,
             [LookTypeDescription] [varchar] (500) NOT NULL,
             [LookTypeConstant] [varchar] (100) NOT NULL,
-            [LookTypeActive] [bit] NOT NULL CONSTRAINT [df_dbo_LookType_LookTypeActive] DEFAULT ((1)),
+            [LookTypeActive] [bit] NOT NULL CONSTRAINT [df_base_LookType_LookTypeActive] DEFAULT ((1)),
             [Timestamp] [rowversion] NOT NULL,
-            [ModifiedBy] [nvarchar] (128) NOT NULL CONSTRAINT [df_dbo_LookType_ModifiedBy] DEFAULT (original_login())
+            [ModifiedBy] [nvarchar] (128) NOT NULL CONSTRAINT [df_base_LookType_ModifiedBy] DEFAULT (original_login())
         );
 
-        CREATE NONCLUSTERED INDEX [ix_dbo_LookType_LookTypeGID] ON [dbo].[LookType] ([LookTypeGID]) 
+        CREATE NONCLUSTERED INDEX [ix_base_LookType_LookTypeGID] ON [base].[LookType] ([LookTypeGID]) 
             INCLUDE ([LookTypeActive], [LookTypeConstant], [LookTypeDescription], [LookTypeValue], [Timestamp]);
     END
 GO
 
-IF OBJECT_ID('dbo.Look','U') IS NULL
+IF OBJECT_ID('base.Look','U') IS NULL
     BEGIN
-        PRINT 'creating dbo.Look table';
+        PRINT 'creating base.Look table';
 
-        CREATE TABLE [dbo].[Look]
+        CREATE TABLE [base].[Look]
         (
-            [LookGID] [smallint] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_dbo_Look] PRIMARY KEY CLUSTERED,
-            [LookTypeFID] [smallint] NOT NULL CONSTRAINT [fk_dbo_Look_LookTypeFID] FOREIGN KEY REFERENCES [dbo].[LookType] ([LookTypeGID]),
+            [LookGID] [smallint] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_base_Look] PRIMARY KEY CLUSTERED,
+            [LookTypeFID] [smallint] NOT NULL CONSTRAINT [fk_base_Look_LookTypeFID] FOREIGN KEY REFERENCES [base].[LookType] ([LookTypeGID]),
             [LookValue] [varchar] (1000) NOT NULL,
             [LookDescription] [varchar] (300) NOT NULL,
-            [LookConstant] [varchar] (100) NOT NULL CONSTRAINT [uq_dbo_Look_LookConstant] UNIQUE NONCLUSTERED,
-            [LookActive] [bit] NOT NULL CONSTRAINT [df_dbo_Look_LookActive] DEFAULT ((1)),
-            [LookOrder] [smallint] NOT NULL CONSTRAINT [df_dbo_Look_LookOrder] DEFAULT ((0)),
+            [LookConstant] [varchar] (100) NOT NULL CONSTRAINT [uq_base_Look_LookConstant] UNIQUE NONCLUSTERED,
+            [LookActive] [bit] NOT NULL CONSTRAINT [df_base_Look_LookActive] DEFAULT ((1)),
+            [LookOrder] [smallint] NOT NULL CONSTRAINT [df_base_Look_LookOrder] DEFAULT ((0)),
             [Timestamp] [rowversion] NOT NULL,
-            [ModifiedBy] [nvarchar] (50) NOT NULL CONSTRAINT [df_dbo_Look_ModifiedBy] DEFAULT (original_login())
+            [ModifiedBy] [nvarchar] (50) NOT NULL CONSTRAINT [df_base_Look_ModifiedBy] DEFAULT (original_login())
         );
-        CREATE NONCLUSTERED INDEX [ix_dbo_Look_LookTypeFID] ON [dbo].[Look] ([LookTypeFID]) INCLUDE ([LookActive], [LookDescription], [LookOrder], [LookValue], [Timestamp]);
-        CREATE NONCLUSTERED INDEX [ix_dbo_Look_LookConstant] ON [dbo].[Look] ([LookConstant]) INCLUDE ([LookActive], [LookDescription], [LookOrder], [LookValue], [Timestamp]);
+        CREATE NONCLUSTERED INDEX [ix_base_Look_LookTypeFID] ON [base].[Look] ([LookTypeFID]) INCLUDE ([LookActive], [LookDescription], [LookOrder], [LookValue], [Timestamp]);
+        CREATE NONCLUSTERED INDEX [ix_base_Look_LookConstant] ON [base].[Look] ([LookConstant]) INCLUDE ([LookActive], [LookDescription], [LookOrder], [LookValue], [Timestamp]);
     END
 
-IF OBJECT_ID('Audit.Audit','U') IS NULL
+IF OBJECT_ID('audit.EventSink','U') IS NULL
     BEGIN
-        PRINT 'creating Audit.Audit table';
-        
-        CREATE TABLE [Audit].[Audit]
+        PRINT 'creating audit.EventSink table';
+
+        CREATE TABLE audit.EventSink
         (
-            [AuditID] [bigint] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_Audit_Audit] PRIMARY KEY CLUSTERED,
-            [AuditDateTime] [datetimeoffset] NOT NULL CONSTRAINT [df_Audit_AuditDateTime] DEFAULT (SYSDATETIMEOFFSET()),
+            ID bigint NOT NULL IDENTITY(1,1) CONSTRAINT pk_audit_EventSink PRIMARY KEY CLUSTERED,
+            EventMessage xml NOT NULL
+        );
+        CREATE PRIMARY XML INDEX px_audit_EventSink ON audit.EventSink (EventMessage);
+        CREATE XML INDEX sxpy_audit_EventSink ON audit.EventSink(EventMessage) USING XML INDEX px_audit_EventSink FOR PROPERTY;
+    END
+
+IF OBJECT_ID('audit.Audit','U') IS NULL
+    BEGIN
+        PRINT 'creating audit.Audit table';
+        
+        CREATE TABLE [audit].[Audit]
+        (
+            [AuditID] [bigint] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_audit_Audit] PRIMARY KEY CLUSTERED,
+            [AuditDateTime] [datetimeoffset] NOT NULL CONSTRAINT [df_audit_AuditDateTime] DEFAULT (SYSDATETIMEOFFSET()),
             [LoginName] [nvarchar] (128) NOT NULL,
             [AppName] [nvarchar] (128) NOT NULL,
             [SchemaName] [nvarchar] (128) NOT NULL,
             [TableName] [nvarchar] (128) NOT NULL,
             [AuditKey] [uniqueidentifier] NOT NULL,
-            [AuditType] [char] (1) NOT NULL CONSTRAINT [ck_Audit_AuditKey] CHECK (([AuditType]='U' OR [AuditType]='D' OR [AuditType]='I')),
+            [AuditType] [char] (1) NOT NULL CONSTRAINT [ck_audit_AuditKey] CHECK (([AuditType]='U' OR [AuditType]='D' OR [AuditType]='I')),
             [ColumnName] [nvarchar] (128) NOT NULL,
             [RecordID] [bigint] NOT NULL,
             [OldValue] [nvarchar] (500) NULL,
@@ -148,26 +207,26 @@ IF OBJECT_ID('Audit.Audit','U') IS NULL
         );
     END
 
-IF OBJECT_ID('Audit.AuditConfig','U') IS NULL
+IF OBJECT_ID('audit.AuditConfig','U') IS NULL
     BEGIN
-        PRINT 'creating Audit.AuditConfig table';
+        PRINT 'creating audit.AuditConfig table';
 
-        CREATE TABLE [Audit].[AuditConfig]
+        CREATE TABLE [audit].[AuditConfig]
         (
-            [AuditConfigID] [int] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_Audit_AuditConfig] PRIMARY KEY CLUSTERED,
+            [AuditConfigID] [int] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_audit_AuditConfig] PRIMARY KEY CLUSTERED,
             [SchemaName] [sys].[sysname] NOT NULL,
             [TableName] [sys].[sysname] NOT NULL,
             [ColumnName] [sys].[sysname] NOT NULL,
-            [EnableAudit] [bit] NOT NULL CONSTRAINT [df_Audit_AuditConfig_EnableAudit] DEFAULT ((1)),
+            [EnableAudit] [bit] NOT NULL CONSTRAINT [df_audit_AuditConfig_EnableAudit] DEFAULT ((1)),
             [Timestamp] [timestamp] NOT NULL,
-            [CreatedDate] [datetimeoffset] NOT NULL CONSTRAINT [df_Audit_AuditConfig_CreatedDate] DEFAULT (sysdatetimeoffset()),
-            [CreatedBy] [nvarchar] (120) NOT NULL CONSTRAINT [df_Audit_AuditConfig_CreatedBy] DEFAULT (original_login()),
-            [UpdatedDate] [datetimeoffset] NOT NULL CONSTRAINT [df_Audit_AuditConfig_UpdatedDate] DEFAULT (sysdatetimeoffset()),
-            [UpdatedBy] [nvarchar] (120) NOT NULL CONSTRAINT [df_Audit_AuditConfig_UpdatedBy] DEFAULT (original_login())
+            [CreatedDate] [datetimeoffset] NOT NULL CONSTRAINT [df_audit_AuditConfig_CreatedDate] DEFAULT (sysdatetimeoffset()),
+            [CreatedBy] [nvarchar] (120) NOT NULL CONSTRAINT [df_audit_AuditConfig_CreatedBy] DEFAULT (original_login()),
+            [UpdatedDate] [datetimeoffset] NOT NULL CONSTRAINT [df_audit_AuditConfig_UpdatedDate] DEFAULT (sysdatetimeoffset()),
+            [UpdatedBy] [nvarchar] (120) NOT NULL CONSTRAINT [df_audit_AuditConfig_UpdatedBy] DEFAULT (original_login())
         );
 
-        ALTER TABLE [Audit].[AuditConfig] 
-            ADD CONSTRAINT [uq_Audit_AuditConfig_TableName_ColumnName] UNIQUE NONCLUSTERED  
+        ALTER TABLE [audit].[AuditConfig] 
+            ADD CONSTRAINT [uq_audit_AuditConfig_TableName_ColumnName] UNIQUE NONCLUSTERED  
             (
                 [SchemaName], 
                 [TableName], 
@@ -180,25 +239,58 @@ GO
 
 PRINT '--- creating views'
 
-IF OBJECT_ID('Audit.v_AuditKey','V') IS NOT NULL
+IF OBJECT_ID('audit.v_AuditKey','V') IS NOT NULL
     BEGIN
-        DROP VIEW Audit.v_AuditKey;
+        DROP VIEW audit.v_AuditKey;
     END
 GO
-PRINT 'creating Audit.v_Audit view';
+PRINT 'creating Audit.v_AuditKey view';
 GO
 
-CREATE VIEW [Audit].[v_AuditKey] 
+CREATE VIEW [audit].[v_AuditKey] 
 AS
 SELECT NEWID() AS [AuditKey];
 GO
 
-IF OBJECT_ID('dbo.v_Look','V') IS NOT NULL
+IF OBJECT_ID('audit.v_EventSink','V') IS NOT NULL
     BEGIN
-        DROP VIEW dbo.v_Look;
+        DROP VIEW audit.v_EventSink;
     END
 GO
-PRINT 'creating dbo.v_Look view';
+PRINT 'creating audit.v_EventSink view';
+GO
+
+CREATE VIEW [audit].[v_EventSink] 
+AS
+SELECT
+    ID,
+    EventMessage.value('(/event/evt_type)[1]','varchar(100)') AS EventType,
+    EventMessage.value('(/event/evt_status)[1]','varchar(100)') AS EventStatus,
+    EventMessage.value('(/event/uid)[1]','uniqueidentifier') AS KeyID,
+    EventMessage.value('(/event/bgn_dt)[1]','datetimeoffset') AS BeginDate,
+    EventMessage.value('(/event/end_dt)[1]','datetimeoffset') AS EndDate,
+    EventMessage.value('(/event/app_nm)[1]','varchar(128)') AS ApplicationName,
+    EventMessage.value('(/event/srv_nm)[1]','varchar(128)') AS ServerName,
+    EventMessage.value('(/event/db_nm)[1]','varchar(128)') AS DatabaseName,
+    EventMessage.value('(/event/sch_nm)[1]','varchar(128)') AS SchemaName,
+    EventMessage.value('(/event/obj_nm)[1]','varchar(128)') AS ObjectName,
+    EventMessage.value('(/event/sec_nm)[1]','varchar(300)') AS SectionName,
+    EventMessage.value('(/event/evt_txt)[1]','varchar(max)') AS EventText,
+    EventMessage.value('(/event/evt_info)[1]','varchar(1000)') AS EventInfo,
+    EventMessage.value('(/event/rows)[1]','int') AS RowsAffected,
+    EventMessage.value('(/event/db_id)[1]','int') AS DatabaseID,
+    EventMessage.value('(/event/obj_id)[1]','int') AS ObjectID,
+    EventMessage.value('(/event/mach_nm)[1]','varchar(128)') AS MachineName,
+    EventMessage.value('(/event/usr_nm)[1]','varchar(128)') AS UserName
+FROM audit.EventSink;
+GO
+
+IF OBJECT_ID('dbo.Look','V') IS NOT NULL
+    BEGIN
+        DROP VIEW dbo.Look;
+    END
+GO
+PRINT 'creating dbo.Look view';
 GO
 
 /*************************************************************************************************
@@ -209,10 +301,11 @@ GO
 		<log revision="1.3" date="03/07/2011" modifier="David Sumlin">Changed column names to use new naming convention and added updated by fields</log> 
 		<log revision="1.4" date="09/13/2013" modifier="David Sumlin">Changed audit fields to only ModifiedBy and ModifiedDate</log> 
         <log revision="1.5" date="08/08/2014" modifier="David Sumlin">Removed audit date fields</log> 
+        <log revision="1.6" date="06/12/2015" modifier="David Sumlin">Renamed to remove v_</log> 
 	</historylog>         
 	
 **************************************************************************************************/
-CREATE VIEW [dbo].[v_Look]
+CREATE VIEW [dbo].[Look]
 WITH SCHEMABINDING
 AS
 SELECT
@@ -231,13 +324,13 @@ SELECT
 	[lt].[LookTypeActive],
 	[lt].[Timestamp] [LookTypeTimestamp],
 	[lt].[ModifiedBy] [LookTypeModifiedBy]
-FROM [dbo].[Look] l WITH (NOLOCK)
-	RIGHT OUTER JOIN [dbo].[LookType] lt WITH (NOLOCK)
+FROM [base].[Look] l WITH (NOLOCK)
+	RIGHT OUTER JOIN [base].[LookType] lt WITH (NOLOCK)
 		ON [l].[LookTypeFID] = [lt].[LookTypeGID];
 GO
 
 
-IF OBJECT_ID('Audit.v_Audit','V') IS NOT NULL
+IF OBJECT_ID('audit.v_Audit','V') IS NOT NULL
     BEGIN
         DROP VIEW Audit.v_Audit;
     END
@@ -245,7 +338,7 @@ GO
 PRINT 'creating Audit.v_Audit view'
 GO
 
-CREATE VIEW [Audit].[v_Audit]
+CREATE VIEW [audit].[v_Audit]
 AS
 SELECT 	
 	AuditID,
@@ -270,7 +363,7 @@ SELECT
 		WHEN OldValue IS NULL AND NewValue IS NULL THEN NewValueMax
 		ELSE CAST(NewValue AS nvarchar(max))
 	END NewValue
-FROM Audit.Audit;
+FROM audit.Audit;
 GO
 
 PRINT '--- creating functions'
@@ -280,13 +373,14 @@ IF OBJECT_ID('dbo.f_LookIDByConstant','FN') IS NOT NULL
         DROP FUNCTION dbo.f_LookIDByConstant;
     END
 GO
-PRINT 'creating f_LookIDByConstant function';
+PRINT 'creating dbo.f_LookIDByConstant function';
 GO
 
 /*************************************************************************************************
 
 	<historylog> 
 		<log revision="1.0" date="07/21/2010" modifier="David Sumlin">Created</log> 
+        <log revision="1.1" date="06/12/2015" modifier="David Sumlin">Changed reference to base schema</log> 
 	</historylog>         
 
 **************************************************************************************************/
@@ -303,7 +397,7 @@ BEGIN
 	DECLARE @id int
 	
 	SELECT @id = [LookGID] 
-	FROM [dbo].[Look]
+	FROM [base].[Look]
 	WHERE [LookConstant] = @constant
 	AND (@active IS NULL OR [LookActive] = @active)
 	
@@ -327,6 +421,7 @@ GO
 		<log revision="1.0" date="05/01/2010" modifier="David Sumlin">Created</log> 
 		<log revision="1.1" date="07/29/2010" modifier="David Sumlin">Added @allow_null parameter</log> 
 		<log revision="1.2" date="09/13/2013" modifier="David Sumlin">Removed view dependency</log> 
+        <log revision="1.3" date="06/12/2015" modifier="David Sumlin">Changed reference to base schema</log> 
 	</historylog>         
 	
 **************************************************************************************************/
@@ -351,8 +446,8 @@ BEGIN
 	-- now verify domain validity
 	IF @valid = 1 AND @id IS NOT NULL
 		SELECT	@valid = SIGN(COUNT(*)) 
-		FROM dbo.Look l
-			INNER JOIN dbo.LookType lt
+		FROM base.Look l
+			INNER JOIN base.LookType lt
 				ON l.LookTypeFID = lt.LookTypeGID 
 		WHERE lt.LookTypeConstant = @look_type_constant
 		AND l.LookGID = @id
@@ -361,15 +456,15 @@ BEGIN
 END;
 GO
 
-IF OBJECT_ID('Audit.f_GetAuditSQL','FN') IS NOT NULL
+IF OBJECT_ID('audit.f_GetAuditSQL','FN') IS NOT NULL
     BEGIN
-        DROP FUNCTION Audit.f_GetAuditSQL;
+        DROP FUNCTION audit.f_GetAuditSQL;
     END
 GO
-PRINT 'creating Audit.f_GetAuditSQL function';
+PRINT 'creating audit.f_GetAuditSQL function';
 GO
 
-CREATE FUNCTION [Audit].[f_GetAuditSQL]
+CREATE FUNCTION [audit].[f_GetAuditSQL]
 (
 	@schema_name sysname = N'',
 	@table_name sysname = N'',
@@ -445,9 +540,9 @@ BEGIN
 	-- get the primary key column name
 	SELECT	@key_col = COLUMN_NAME FROM @pk_cols;
 
-	SELECT	@audit_key = CAST(AuditKey AS nvarchar(100)) FROM [Audit].[v_AuditKey]
+	SELECT	@audit_key = CAST(AuditKey AS nvarchar(100)) FROM [audit].[v_AuditKey]
 
-	IF NOT EXISTS (SELECT 0 FROM [Audit].[AuditConfig] WHERE Tablename = @table_name AND EnableAudit = 1)
+	IF NOT EXISTS (SELECT 0 FROM [audit].[AuditConfig] WHERE Tablename = @table_name AND EnableAudit = 1)
 		RETURN @retval
 
 	SET @retval =	N'
@@ -473,7 +568,7 @@ BEGIN
 				WHEN c.DATA_TYPE IN ('image','text','ntext') THEN 1
 				ELSE 0
 			END AS IsMax
-		FROM Audit.AuditConfig ac
+		FROM audit.AuditConfig ac
 			INNER JOIN INFORMATION_SCHEMA.COLUMNS c
 				ON ac.ColumnName = c.COLUMN_NAME
 				AND ac.TableName = c.TABLE_NAME
@@ -545,12 +640,12 @@ GO
 PRINT '--- creating procedures'
 GO
 
-IF OBJECT_ID('DBA.s_AddSQLErrorLog','P') IS NOT NULL
+IF OBJECT_ID('audit.s_AddSQLErrorLog','P') IS NOT NULL
     BEGIN
-        DROP PROCEDURE DBA.s_AddSQLErrorLog;
+        DROP PROCEDURE audit.s_AddSQLErrorLog;
     END
 GO
-PRINT 'creating DBA.s_AddSQLErrorLog procedure';
+PRINT 'creating audit.s_AddSQLErrorLog procedure';
 GO
 
 /*************************************************************************************************
@@ -560,10 +655,9 @@ GO
 	
 	<samples> 
 		<sample>
-			<description>
-			This would insert the error values for a 'Sample section in code' from some procedure into the [DBA].[LogSQLError] table.
+			<description>This procedure logs sql errors from scripts or procedures and puts them into the EventSink
 			</description>
-			<code>EXEC [DBA].[s_AddSQLErrorLog] 'Sample section in code'</code> 
+			<code>EXEC [audit].[s_AddSQLErrorLog] 'Sample section in code'</code> 
 		</sample>
 	</samples> 
 	
@@ -574,10 +668,11 @@ GO
 		<log revision="1.3" date="09/03/2010" modifier="David Sumlin">Added WITH EXECUTE AS OWNER.  This allows me to grant EXEC permissions on this proc without the table</log> 
 		<log revision="1.4" date="11/30/2011" modifier="David Sumlin">Added @alt variable for flexibility.  Initially created to remove INSERT...EXEC functionality so proc can be used in other INSERT...EXEC scenarios</log> 
 		<log revision="1.5" date="11/30/2012" modifier="David Sumlin">Changed to use DBA schema in local database</log> 
+        <log revision="1.6" date="06/12/2015" modifier="David Sumlin">Changed to use Audit.EventSink and changed schema to Audit</log> 
 	</historylog>         
 	
 **************************************************************************************************/
-CREATE PROCEDURE [DBA].[s_AddSQLErrorLog]
+CREATE PROCEDURE [audit].[s_AddSQLErrorLog]
 (
 	@section varchar(128) = NULL,
 	@extrainfo nvarchar(4000) = NULL,
@@ -588,7 +683,10 @@ WITH EXECUTE AS OWNER
 AS
 SET NOCOUNT ON
  
-	DECLARE @cmd varchar(1000)
+	DECLARE @cmd varchar(1000),
+            @xml xml,
+            @event_info nvarchar(4000),
+            @event_type nvarchar(30);
 	
 	-- use this table to hold the info from DBCC INPUTBUFFER
 	DECLARE @err_tbl table 
@@ -610,48 +708,46 @@ SET NOCOUNT ON
 			INSERT INTO @err_tbl 
 			EXEC(@cmd)
 		END
- 
-	-- Log it!
-	INSERT INTO [DBA].[LogSQLError] 
-	(
-		[SQLErrorProcedure],
-		[SQLErrorLineNumber],
-		[SQLErrorNumber],
-		[SQLErrorMessage],
-		[SQLErrorSeverity],
-		[SQLErrorState],
-		[SQLErrorProcedureSection],
-		[SQLErrorSPID],
-		[SQLErrorEventType],
-		[SQLErrorParameter],
-		[SQLErrorEventInfo],
-		[SQLErrorExtraInfo],
-		[SQLErrorAnnounce],
-		[CreatedByMachine]
-	)
-	SELECT	ERROR_PROCEDURE(),
-			ERROR_LINE(),
-			ERROR_NUMBER(),
-			ERROR_MESSAGE(),
-			ERROR_SEVERITY(),
-			ERROR_STATE(),
-			@section,
-			@@SPID,
-			[EventType],
-			[Parameters],
-			[EventInfo],
-			@extrainfo,
-			ISNULL(@announce,1),			
-			HOST_NAME()
-	FROM @err_tbl;
+
+    SELECT 
+        @event_info = [EventInfo],
+        @event_type = [EventType]
+    FROM @err_tbl;
+
+	SET @xml = 
+    (
+    SELECT
+        'error' AS evt_type,
+        'alert' AS evt_status,
+        COALESCE(@announce,'') AS err_announce,
+        COALESCE(@@SPID,'')  AS err_spid,
+        COALESCE(ERROR_PROCEDURE(),'') AS err_proc_nm,
+        COALESCE(ERROR_LINE(),'') AS err_line,
+        COALESCE(ERROR_NUMBER(),'') AS err_num,
+        COALESCE(ERROR_MESSAGE(),'') AS err_msg,
+        COALESCE(ERROR_SEVERITY(),'') AS err_lvl,
+        COALESCE(ERROR_STATE(),'') AS err_state,
+        COALESCE(@@SERVERNAME,'') AS srv_nm,
+        COALESCE(DB_NAME(),'') AS db_nm,
+		COALESCE(@section,'') AS sec_nm,
+		COALESCE(@event_info,'') AS evt_txt,
+		COALESCE(@event_type,'') AS evt_info,
+        COALESCE(HOST_NAME(),'') AS mach_nm,
+        COALESCE(ORIGINAL_LOGIN(),'') AS usr_nm
+        FOR XML RAW ('event'), ELEMENTS
+    );
+
+    -- Log it
+    INSERT INTO audit.EventSink (EventMessage) VALUES (@xml)
+
 GO
 
-IF OBJECT_ID('DBA.s_AddProcExecLog','P') IS NOT NULL
+IF OBJECT_ID('audit.s_AddProcExecLog','P') IS NOT NULL
     BEGIN
-        DROP PROCEDURE DBA.s_AddProcExecLog;
+        DROP PROCEDURE audit.s_AddProcExecLog;
     END
 GO
-PRINT 'creating DBA.s_AddProcExecLog procedure';
+PRINT 'creating audit.s_AddProcExecLog procedure';
 GO
 
 /*************************************************************************************************
@@ -662,9 +758,9 @@ GO
 	<samples> 
 		<sample>
 			<description>
-			This would insert stored procedure execution values into the [DBA].[LogProcExec] table.
+			This would insert stored procedure execution values into the [Audit].[EventSink] table.
 			</description>
-			<code>EXEC [DBA].[s_AddProcExecLog] DB_ID(), @@PROCID, @exec_start, @exec_end, NULL, NULL, NULL, NULL</code> 
+			<code>EXEC [audit].[s_AddProcExecLog] DB_ID(), @@PROCID, @exec_start, @exec_end, NULL, NULL, NULL, NULL</code> 
 		</sample>
 	</samples> 
 
@@ -682,27 +778,33 @@ GO
 		<log revision="2.0" date="11/30/2012" modifier="David Sumlin">Changed to DBA schema for local database</log>
 		<log revision="2.1" date="06/12/2014" modifier="David Sumlin">Changed datetime2 to datetimeoffset</log> 
         <log revision="2.2" date="12/03/2014" modifier="David Sumlin">Added @object_nm for adhoc code that is not in a stored procedure</log> 
+        <log revision="2.3" date="12/17/2014" modifier="David Sumlin">Added (7) to datetimeoffset input parameters</log> 
+        <log revision="2.4" date="04/06/2015" modifier="David Sumlin">Change from inserting rows into Audit.ProcExecLog into inserting xml into Audit.EventSink.  Also added @app_nm parameter</log>
+        <log revision="2.5" date="04/06/2015" modifier="David Sumlin">Removed WITH EXECUTE AS OWNER.  Was incorrect in my previous understanding.  Permission should be a schema level.</log>
+        <log revision="2.6" date="06/12/2015" modifier="David Sumlin">Changed to audit schema</log>
 	</historylog>         
 
 **************************************************************************************************/
-CREATE PROCEDURE [DBA].[s_AddProcExecLog]
+CREATE PROCEDURE [audit].[s_AddProcExecLog]
 (
 	@db_id int,
 	@object_id int,
-	@start datetimeoffset = NULL,
-	@end datetimeoffset = NULL,
+	@start datetimeoffset(7) = NULL,
+	@end datetimeoffset(7) = NULL,
 	@extra_info nvarchar(2000) = NULL,
 	@rows int = NULL,
 	@section varchar(300) = NULL,
 	@version uniqueidentifier = NULL,
 	@alt varchar(100) = NULL,
-    @object_nm nvarchar(128) = NULL
+    @object_nm nvarchar(128) = NULL,
+    @app_nm nvarchar(128) = NULL
 )
-WITH EXECUTE AS OWNER
 AS
 SET NOCOUNT ON
 
-	DECLARE @cmd varchar(1000)
+	DECLARE @cmd varchar(1000),
+            @xml xml,
+            @event_info nvarchar(4000);
 
 	-- use this table to hold the info from DBCC INPUTBUFFER or anything else
 	DECLARE @dbcc_tbl table 
@@ -725,40 +827,45 @@ SET NOCOUNT ON
 			EXEC(@cmd)
 		END
 		
-	-- Log it!
-	INSERT INTO [DBA].[LogProcExec] 
-	(
-		[ProcExecStartTime],
-		[ProcExecEndTime],
-		[DatabaseID],
-		[ProcExecVersion],
-		[ObjectID],
-		[ProcName],
-		[ProcSection],
-		[ProcText],
-		[ExtraInfo],
-		[RowsAffected]
-	)
-	SELECT
-		ISNULL(@start,SYSDATETIMEOFFSET()),
-		@end,
-		ISNULL(@db_id,0),
-		ISNULL(@version,NEWID()),
-		ISNULL(@object_id,0),
-		ISNULL(QUOTENAME(DB_NAME(DB_ID())) + '.' + QUOTENAME(OBJECT_SCHEMA_NAME(@object_id, @db_id)) + '.' + QUOTENAME(OBJECT_NAME(@object_id, @db_id)),COALESCE(@object_nm,'unknown')),
-		@section,
-		[EventInfo],
-		@extra_info,
-		@rows
-	FROM @dbcc_tbl
+    SELECT 
+        @event_info = [EventInfo] 
+    FROM @dbcc_tbl;
+
+	SET @xml = 
+    (
+    SELECT
+        'proc exec' AS evt_type,
+        'info' AS evt_status,
+        COALESCE(@app_nm,'') AS app_nm,
+        COALESCE(@@SERVERNAME,'') AS srv_nm,
+        COALESCE(DB_NAME(@db_id),'') AS db_nm,
+        COALESCE(OBJECT_SCHEMA_NAME(@object_id, @db_id),'') AS sch_nm,
+		@start AS bgn_dt,
+		@end AS end_dt,
+		COALESCE(@db_id,0) AS [db_id],
+		COALESCE(@version,NEWID()) AS [uid],
+		COALESCE(@object_id,0) AS obj_id,
+		COALESCE(OBJECT_NAME(@object_id, @db_id),COALESCE(@object_nm,'unknown')) AS obj_nm,
+		COALESCE(@section,'') AS sec_nm,
+		COALESCE(@event_info,'') AS evt_txt,
+		COALESCE(@extra_info,'') AS evt_info,
+		COALESCE(@rows,'') AS [rows],
+        COALESCE(HOST_NAME(),'') AS mach_nm,
+        COALESCE(ORIGINAL_LOGIN(),'') AS usr_nm
+        FOR XML RAW ('event'), ELEMENTS
+    );
+
+    -- Log it
+    INSERT INTO audit.EventSink (EventMessage) VALUES (@xml)
+
 GO
 
-IF OBJECT_ID('DBA.s_DropObject','P') IS NOT NULL
+IF OBJECT_ID('dba.s_DropObject','P') IS NOT NULL
     BEGIN
-        DROP PROCEDURE DBA.s_DropObject;
+        DROP PROCEDURE dba.s_DropObject;
     END
 GO
-PRINT 'creating DBA.s_DropObject procedure';
+PRINT 'creating dba.s_DropObject procedure';
 GO
 
 /*************************************************************************************************
@@ -824,10 +931,11 @@ GO
 		<log revision="2.7" date="08/14/2012" modifier="David Sumlin">Added @log_id parameter for logging purposes</log>
 		<log revision="2.8" date="12/11/2012" modifier="David Sumlin">Fixed DROP TRIGGER section</log>
         <log revision="2.9" date="10/25/2014" modifier="David Sumlin">Removed custom error code and just put in text message</log>
+        <log revision="3.0" date="04/06/2015" modifier="David Sumlin">Changed to use datetimeoffset for logging date/times, and added @app_nm parameter</log>
 	</historylog>         
 
 **************************************************************************************************/
-CREATE PROCEDURE [DBA].[s_DropObject]
+CREATE PROCEDURE [dba].[s_DropObject]
 (
 	@object_name sysname,
 	@object_type sysname = 'TABLE',
@@ -835,18 +943,17 @@ CREATE PROCEDURE [DBA].[s_DropObject]
 	@db_name sysname = NULL,
 	@qualifier_name sysname = NULL,
 	@debug bit = 0,
-	@log_id uniqueidentifier = NULL
+	@log_id uniqueidentifier = NULL,
+    @app_nm varchar(128) = NULL
 )
-WITH EXECUTE AS CALLER
 AS
 SET NOCOUNT ON
-SET ROWCOUNT 0
 SET XACT_ABORT ON
 
 	-- Auditing variables
 	DECLARE @err_sec [varchar](128) = '',
-			@exec_start datetime2(7) = SYSUTCDATETIME(),
-			@exec_end datetime2(7) = NULL,
+			@exec_start datetimeoffset(7) = SYSDATETIMEOFFSET(),
+			@exec_end datetimeoffset(7) = NULL,
 			@params nvarchar(2000) = NULL,
 			@rows int = 0,
 			@db_id int = DB_ID()
@@ -1046,8 +1153,8 @@ SET XACT_ABORT ON
 			END
 		
 		-- Audit action
-		SET @exec_end = SYSUTCDATETIME()
-		EXEC [DBA].[s_AddProcExecLog] @db_id = @db_id, @object_id = @@PROCID, @start = @exec_start, @end = @exec_end, @extra_info = @params, @rows = @rows, @section = @err_sec, @version = @log_id
+		SET @exec_end = SYSDATETIMEOFFSET();
+		EXEC [audit].[s_AddProcExecLog] @db_id = @db_id, @object_id = @@PROCID, @start = @exec_start, @end = @exec_end, @extra_info = @params, @rows = @rows, @section = @err_sec, @version = @log_id, @app_nm = @app_nm;
 
 		RETURN (0)
 
@@ -1066,7 +1173,7 @@ SET XACT_ABORT ON
 			ROLLBACK TRANSACTION
 
 		-- Log the error
-		EXEC [DBA].[s_AddSQLErrorLog] @section = @err_sec, @extrainfo = @params, @announce = 1
+		EXEC [audit].[s_AddSQLErrorLog] @section = @err_sec, @extrainfo = @params, @announce = 1
 
 		-- Return error message to calling code via @@ERROR and error number via return code
 		RAISERROR (@err_msg, @err_severity, 1)
@@ -1099,6 +1206,7 @@ GO
 	<historylog> 
 		<log revision="1.0" date="12/31/2011" modifier="David Sumlin">Created</log> 
 		<log revision="1.1" date="09/14/2013" modifier="David Sumlin">Changed audit columns to ModifiedBy and ModifiedDate</log> 
+        <log revision="1.2" date="06/12/2015" modifier="David Sumlin">Removed EXECUTE AS OWNER and changed to reference base schema objects</log> 
 	</historylog>         
 
 **************************************************************************************************/
@@ -1112,10 +1220,8 @@ CREATE PROCEDURE [dbo].[s_LookTypeUpsert]
 	@timestamp binary(8) = NULL,
 	@return_id smallint = NULL OUT
 )
-WITH EXECUTE AS OWNER
 AS
 SET NOCOUNT ON
-SET ROWCOUNT 0
 SET XACT_ABORT ON
 
 	BEGIN TRY
@@ -1135,11 +1241,11 @@ SET XACT_ABORT ON
 				RAISERROR(N'LookTypeConstant must not be NULL',15,1)
 
 			-- check to for duplicate value
-			IF EXISTS(SELECT [LookTypeValue] FROM [dbo].[LookType] WITH (NOLOCK) WHERE [LookTypeValue] = @value)
+			IF EXISTS(SELECT [LookTypeValue] FROM [base].[LookType] WITH (NOLOCK) WHERE [LookTypeValue] = @value)
 				RAISERROR(N'LookTypeValue must be unique within table',15,1)
 			
 			-- check for duplicate constants
-			IF EXISTS(SELECT [LookTypeConstant] FROM [dbo].[LookType] WITH (NOLOCK) WHERE [LookTypeConstant] = @constant)
+			IF EXISTS(SELECT [LookTypeConstant] FROM [base].[LookType] WITH (NOLOCK) WHERE [LookTypeConstant] = @constant)
 				RAISERROR(N'LookTypeConstant must be unique within table',15,1)
 				
 		END
@@ -1153,18 +1259,18 @@ SET XACT_ABORT ON
 			-- make sure that we are not going to update a value to be a duplicate value
 			IF @value IS NOT NULL
 				BEGIN
-					IF EXISTS(SELECT [LookTypeValue] FROM [dbo].[LookType] WITH (NOLOCK) WHERE [LookTypeValue] = @value AND [LookTypeGID] <> @id)
+					IF EXISTS(SELECT [LookTypeValue] FROM [base].[LookType] WITH (NOLOCK) WHERE [LookTypeValue] = @value AND [LookTypeGID] <> @id)
 						RAISERROR(N'LookTypeValue must be unique within table',15,1)
 				END
 
 			-- make sure that it is a valid id
-			IF NOT EXISTS(SELECT [LookTypeGID] FROM [dbo].[LookType] WITH (NOLOCK) WHERE [LookTypeGID] = @id)
+			IF NOT EXISTS(SELECT [LookTypeGID] FROM [base].[LookType] WITH (NOLOCK) WHERE [LookTypeGID] = @id)
 				RAISERROR(N'id does not exist',15,1)
 				
 			-- make sure that we are not going to update a constant to be a duplicate value
 			IF @constant IS NOT NULL
 				BEGIN
-					IF EXISTS(SELECT [LookTypeConstant] FROM [dbo].[LookType] WITH (NOLOCK) WHERE [LookTypeConstant] = @constant AND [LookTypeGID] <> @id)
+					IF EXISTS(SELECT [LookTypeConstant] FROM [base].[LookType] WITH (NOLOCK) WHERE [LookTypeConstant] = @constant AND [LookTypeGID] <> @id)
 						RAISERROR(N'LookTypeConstant must be unique within table',15,1)
 				END
 
@@ -1175,7 +1281,7 @@ SET XACT_ABORT ON
 		IF @id IS NULL 
 			-- insert
 			BEGIN
-				INSERT INTO [dbo].[LookType] 
+				INSERT INTO [base].[LookType] 
 				(
 					[LookTypeValue],
 					[LookTypeDescription],
@@ -1197,7 +1303,7 @@ SET XACT_ABORT ON
 			-- update
 			BEGIN
 			
-				UPDATE [dbo].[LookType]
+				UPDATE [base].[LookType]
 				SET [LookTypeValue] = COALESCE(@value,[LookTypeValue]),
 					[LookTypeDescription] = COALESCE(@description,[LookTypeDescription]),
 					[LookTypeConstant] = COALESCE(UPPER(@constant),[LookTypeConstant]),
@@ -1266,8 +1372,9 @@ GO
 
 	<historylog> 
 		<log revision="1.0" date="00/00/2010" modifier="David Sumlin">Created</log> 
-		<log projectversion="002" revision="1.1" date="03/18/2013" modifier="David Sumlin">Added @ev parameter to allow for Entity Value (Name Value pairs) inserts into the Look table.  These have to be explicitly allowed since this is a architecturally different usage for Look</log> 
-		<log projectversion="---" revision="1.2" date="09/14/2013" modifier="David Sumlin">Changed audit columns to ModifiedBy and ModifiedDate</log> 
+		<log revision="1.1" date="03/18/2013" modifier="David Sumlin">Added @ev parameter to allow for Entity Value (Name Value pairs) inserts into the Look table.  These have to be explicitly allowed since this is a architecturally different usage for Look</log> 
+		<log revision="1.2" date="09/14/2013" modifier="David Sumlin">Changed audit columns to ModifiedBy and ModifiedDate</log> 
+        <log revision="1.3" date="06/12/2015" modifier="David Sumlin">Removed EXECUTE AS OWNER and changed to reference base schema objects</log> 
 	</historylog>         
 
 **************************************************************************************************/
@@ -1285,10 +1392,8 @@ CREATE PROCEDURE [dbo].[s_LookUpsert]
 	@ev bit = 0,
 	@return_id int = NULL OUT
 )
-WITH EXECUTE AS OWNER
 AS
 SET NOCOUNT ON
-SET ROWCOUNT 0
 SET XACT_ABORT ON
 
 	BEGIN TRY
@@ -1320,25 +1425,25 @@ SET XACT_ABORT ON
 			-- check for valid look_type_id
 			IF @look_type_id IS NOT NULL
 				BEGIN
-					IF NOT EXISTS(SELECT [LookTypeGID] FROM [dbo].[LookType] WITH (NOLOCK) WHERE [LookTypeGID] = @look_type_id)
+					IF NOT EXISTS(SELECT [LookTypeGID] FROM [base].[LookType] WITH (NOLOCK) WHERE [LookTypeGID] = @look_type_id)
 						RAISERROR(N'@look_type_id is not a valid id',15,1)
 				END
 				
 			-- check for valid look_type_constant
 			IF @look_type_id IS NULL AND @look_type_constant IS NOT NULL
 				BEGIN
-					SELECT @look_type_id = [LookTypeGID] FROM [dbo].[LookType] WITH (NOLOCK) WHERE [LookTypeConstant] = @look_type_constant
+					SELECT @look_type_id = [LookTypeGID] FROM [base].[LookType] WITH (NOLOCK) WHERE [LookTypeConstant] = @look_type_constant
 					
 					IF @look_type_id IS NULL
 						RAISERROR(N'@look_type_constant is not a valid constant',15,1)
 				END
 				
 			-- check for duplicate value with same look_type_id
-			IF EXISTS(SELECT [LookValue] FROM [dbo].[Look] WITH (NOLOCK) WHERE [LookValue] = @value AND [LookTypeFID] = @look_type_id AND @ev = 0)
+			IF EXISTS(SELECT [LookValue] FROM [base].[Look] WITH (NOLOCK) WHERE [LookValue] = @value AND [LookTypeFID] = @look_type_id AND @ev = 0)
 				RAISERROR(N'LookValue must be unique within same look_type_id',15,1)
 			
 			-- check for duplicate constant
-			IF EXISTS(SELECT [LookConstant] FROM [dbo].[Look] WITH (NOLOCK) WHERE [LookConstant] = @constant)
+			IF EXISTS(SELECT [LookConstant] FROM [base].[Look] WITH (NOLOCK) WHERE [LookConstant] = @constant)
 				RAISERROR(N'LookConstant must be unique within table',15,1)
 				
 		END
@@ -1351,25 +1456,25 @@ SET XACT_ABORT ON
 
 			-- get the look_type_id for validation
 			IF @look_type_id IS NULL
-				SELECT @look_type_id = [LookTypeFID] FROM [dbo].[Look] WITH (NOLOCK) WHERE [LookGID] = @look_id
+				SELECT @look_type_id = [LookTypeFID] FROM [base].[Look] WITH (NOLOCK) WHERE [LookGID] = @look_id
 			ELSE
 				BEGIN
 					-- check for valid look_type_id
-					IF NOT EXISTS(SELECT [LookTypeGID] FROM [dbo].[LookType] WITH (NOLOCK) WHERE [LookTypeGID] = @look_type_id)
+					IF NOT EXISTS(SELECT [LookTypeGID] FROM [base].[LookType] WITH (NOLOCK) WHERE [LookTypeGID] = @look_type_id)
 						RAISERROR(N'@look_type_id is not a valid id',15,1)
 				END
 
 			-- make sure that we are not going to update a value to be a duplicate value
 			IF @value IS NOT NULL
 				BEGIN
-					IF EXISTS(SELECT [LookValue] FROM [dbo].[Look] WITH (NOLOCK) WHERE [LookValue] = @value AND [LookTypeFID] = @look_type_id AND [LookGID] <> @look_id AND @ev = 0)
+					IF EXISTS(SELECT [LookValue] FROM [base].[Look] WITH (NOLOCK) WHERE [LookValue] = @value AND [LookTypeFID] = @look_type_id AND [LookGID] <> @look_id AND @ev = 0)
 						RAISERROR(N'@look_value must be unique within same look_type_id',15,1)
 				END
 
 			-- make sure that we are not going to update a constant to be a duplicate value
 			IF @constant IS NOT NULL
 				BEGIN
-					IF EXISTS(SELECT [LookConstant] FROM [dbo].[Look] WITH (NOLOCK) WHERE [LookConstant] = @constant AND [LookGID] <> @look_id)
+					IF EXISTS(SELECT [LookConstant] FROM [base].[Look] WITH (NOLOCK) WHERE [LookConstant] = @constant AND [LookGID] <> @look_id)
 						RAISERROR(N'@look_constant must be unique within table',15,1)
 				END
 
@@ -1379,7 +1484,7 @@ SET XACT_ABORT ON
 		IF @look_id IS NULL 
 			-- insert
 			BEGIN
-				INSERT INTO [dbo].[Look] 
+				INSERT INTO [base].[Look] 
 				(
 					[LookTypeFID],
 					[LookValue],
@@ -1405,7 +1510,7 @@ SET XACT_ABORT ON
 			-- update
 			BEGIN
 			
-				UPDATE [dbo].[Look]
+				UPDATE [base].[Look]
 				SET [LookTypeFID] = COALESCE(@look_type_id,[LookTypeFID]),
 					[LookValue] = COALESCE(@value,[LookValue]),
 					[LookDescription] = COALESCE(@description,[LookDescription]),
@@ -1454,15 +1559,15 @@ SET XACT_ABORT ON
 GO
 
 
-IF OBJECT_ID('Audit.s_PopulateAuditConfig','P') IS NOT NULL
+IF OBJECT_ID('audit.s_PopulateAuditConfig','P') IS NOT NULL
     BEGIN
-        DROP PROCEDURE Audit.s_PopulateAuditConfig;
+        DROP PROCEDURE audit.s_PopulateAuditConfig;
     END
 GO
-PRINT 'creating Audit.s_PopulateAuditConfig procedure';
+PRINT 'creating audit.s_PopulateAuditConfig procedure';
 GO
 
-CREATE procedure [Audit].[s_PopulateAuditConfig]
+CREATE procedure [audit].[s_PopulateAuditConfig]
 (
 	@apply_to_schema sysname = NULL,
 	@apply_to_table sysname = NULL,
@@ -1473,12 +1578,12 @@ SET NOCOUNT ON
 
 IF @repopulate  = 1 
 	DELETE 
-	FROM [Audit].[AuditConfig]
+	FROM [audit].[AuditConfig]
 	WHERE (@apply_to_schema IS NULL OR SchemaName = @apply_to_schema)
 	AND (@apply_to_table IS NULL OR TableName = @apply_to_table)
 
 
-INSERT  INTO [Audit].[AuditConfig]
+INSERT  INTO [audit].[AuditConfig]
 (
 	SchemaName,
 	TableName,
@@ -1507,20 +1612,20 @@ AND (@apply_to_table IS NULL OR t.name = @apply_to_table)
 AND	c.name NOT IN ('ID','LU','FU','LastUpdate','FirstUpdate','LastUpdateDate','FirstUpdateDate','CreateDate','CreatedDate','CreateBy','CreatedBy','ModifiedBy','ModifiedDate','Timestamp','Rowversion')
 AND t.name NOT IN ('ELMAH_Error','sysdiagrams')
 AND COLUMNPROPERTY(OBJECT_ID('[' + s.name + '].[' + t.name + ']'),c.name,'IsIdentity') = 0 -- don't include identity values
-AND NOT EXISTS	(SELECT 0 FROM [Audit].[AuditConfig] ac WHERE ac.Tablename = t.[name] AND ac.ColumnName = c.[name] AND ac.SchemaName = s.[name])
+AND NOT EXISTS	(SELECT 0 FROM [audit].[AuditConfig] ac WHERE ac.Tablename = t.[name] AND ac.ColumnName = c.[name] AND ac.SchemaName = s.[name])
 AND c.user_type_id NOT IN (128,129,130,241) -- don't include hierarchy, geography, geometry, xml
 AND EXISTS(	SELECT 0 FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMNPROPERTY(OBJECT_ID('[' + TABLE_SCHEMA + '].[' + TABLE_NAME + ']'),COLUMN_NAME,'IsIdentity') = 1 AND t.name = TABLE_NAME AND s.name = TABLE_SCHEMA); -- only tables with IDENTITY
 GO
 
-IF OBJECT_ID('Audit.s_RecreateTableTriggers','P') IS NOT NULL
+IF OBJECT_ID('audit.s_RecreateTableTriggers','P') IS NOT NULL
     BEGIN
-        DROP PROCEDURE Audit.s_RecreateTableTriggers;
+        DROP PROCEDURE audit.s_RecreateTableTriggers;
     END
 GO
-PRINT 'creating Audit.s_RecreateTableTriggers procedure';
+PRINT 'creating audit.s_RecreateTableTriggers procedure';
 GO
 
-CREATE PROCEDURE [Audit].[s_RecreateTableTriggers]
+CREATE PROCEDURE [audit].[s_RecreateTableTriggers]
 (
 	@apply_to_schema sysname = NULL,
 	@apply_to_table sysname = NULL,
@@ -1559,7 +1664,7 @@ DECLARE curs CURSOR FOR
 		s.name, 
 		t.name 
 	FROM sys.tables t 
-		INNER JOIN (SELECT DISTINCT TableName FROM Audit.AuditConfig) a
+		INNER JOIN (SELECT DISTINCT TableName FROM audit.AuditConfig) a
 			ON t.name = a.TableName
 		INNER JOIN sys.schemas s 
 			ON t.schema_id = s.schema_id 
@@ -1627,6 +1732,7 @@ CLOSE curs
 DEALLOCATE curs;
 GO
 
+
 /*************************************************************************************************
 	<scope>Utility</scope>
 
@@ -1658,5 +1764,398 @@ EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'The original s
 EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Takes a string and replaces single quotes with double single quotes.' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'FUNCTION',@level1name=N'f_QuoteString'
 GO
 
+/*************************************************************************************************
+	
+	<scope>For logging</scope>
+	
+	<returns> 
+		<return code="0"	message="Success"	type="Success" /> 
+	</returns>
+	
+	<samples> 
+		<sample>
+		   <description></description>
+		   <code></code> 
+		</sample>
+	</samples> 
 
+	<historylog> 
+		<log revision="1.0" date="05/22/2015" modifier="David Sumlin">Created</log> 
+        <log revision="1.1" date="05/22/2015" modifier="David Sumlin">Added common parameters to add to KVStore</log> 
+	</historylog>         
 
+**************************************************************************************************/
+CREATE PROCEDURE [audit].[s_KVAdd]
+(
+	@session uniqueidentifier, 
+	@k varchar(100),
+    @v sql_variant
+)
+AS
+SET NOCOUNT ON
+SET XACT_ABORT ON
+
+    IF @session IS NULL
+        RAISERROR('@session can''t be NULL',16,1);
+
+    IF @k IS NULL
+        RAISERROR('@k can''t be NULL',16,1);
+
+    SET @v = COALESCE(@v,'');
+
+	BEGIN TRY
+
+        -- upsert
+        IF EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session AND K = @k)
+            BEGIN
+                UPDATE audit.KVStore
+                SET V = @v
+                WHERE KVStoreGID = @session
+                AND K = @k;
+            END
+        ELSE
+            BEGIN
+                INSERT INTO audit.KVStore (KVStoreGID,K,V)
+                VALUES (@session,@k,@v);
+            END
+
+	    RETURN(0)
+				
+	END TRY
+	BEGIN CATCH
+
+	   BEGIN
+
+			-- Declare local variables so we can return them to the caller			
+			DECLARE @err_msg varchar(1000),
+					@err_severity int;
+			
+			SELECT	@err_msg = ERROR_MESSAGE(),
+					@err_severity = ERROR_SEVERITY();
+
+			-- This will forcibly rollback a transaction that is marked as uncommitable
+			IF (XACT_STATE()) = -1 AND @@TRANCOUNT > 0
+				ROLLBACK TRANSACTION
+
+		END
+
+		-- Return error message to calling code via @@ERROR and error number via return code
+		RAISERROR (@err_msg, @err_severity, 1)
+		RETURN(ERROR_NUMBER())
+
+	END CATCH
+GO
+
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Add or Update value in KVStore table' , @level0type=N'SCHEMA',@level0name=N'audit', @level1type=N'PROCEDURE',@level1name=N's_KVAdd'
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Unique session ID to identify different KV groupings in KVStore' , @level0type=N'SCHEMA',@level0name=N'audit', @level1type=N'PROCEDURE',@level1name=N's_KVAdd', @level2type=N'PARAMETER',@level2name=N'@session'
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Key' , @level0type=N'SCHEMA',@level0name=N'audit', @level1type=N'PROCEDURE',@level1name=N's_KVAdd', @level2type=N'PARAMETER',@level2name=N'@k'
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Value' , @level0type=N'SCHEMA',@level0name=N'audit', @level1type=N'PROCEDURE',@level1name=N's_KVAdd', @level2type=N'PARAMETER',@level2name=N'@v'
+GO
+
+/*************************************************************************************************
+	
+	<scope>For logging</scope>
+	
+	<returns> 
+		<return code="0"	message="Success"	type="Success" /> 
+	</returns>
+	
+	<samples> 
+		<sample>
+		   <description></description>
+		   <code></code> 
+		</sample>
+	</samples> 
+
+	<historylog> 
+		<log revision="1.0" date="05/22/2015" modifier="David Sumlin">Created</log> 
+	</historylog>         
+
+**************************************************************************************************/
+CREATE PROCEDURE [audit].[s_KVDelete]
+(
+	@session uniqueidentifier, 
+	@k varchar(100)
+)
+AS
+SET NOCOUNT ON
+SET XACT_ABORT ON
+
+    -- validate input variables
+    IF @session IS NULL
+        RAISERROR('@session can''t be NULL',16,1);
+
+    IF @k IS NULL
+        RAISERROR('@k can''t be NULL',16,1);
+
+	BEGIN TRY
+
+        DELETE
+        FROM audit.KVStore
+        WHERE KVStoreGID = @session
+        AND K = @k;
+
+		RETURN(0)
+				
+	END TRY
+	BEGIN CATCH
+
+	   BEGIN
+
+			-- Declare local variables so we can return them to the caller			
+			DECLARE @err_msg varchar(1000),
+					@err_severity int;
+			
+			SELECT	@err_msg = ERROR_MESSAGE(),
+					@err_severity = ERROR_SEVERITY();
+
+			-- This will forcibly rollback a transaction that is marked as uncommitable
+			IF (XACT_STATE()) = -1 AND @@TRANCOUNT > 0
+				ROLLBACK TRANSACTION
+
+		END
+
+		-- Return error message to calling code via @@ERROR and error number via return code
+		RAISERROR (@err_msg, @err_severity, 1)
+		RETURN(ERROR_NUMBER())
+
+	END CATCH
+
+GO
+
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Delete a value in KVStore table' , @level0type=N'SCHEMA',@level0name=N'audit', @level1type=N'PROCEDURE',@level1name=N's_KVDelete'
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Unique session ID to identify different KV groupings in KVStore' , @level0type=N'SCHEMA',@level0name=N'audit', @level1type=N'PROCEDURE',@level1name=N's_KVDelete', @level2type=N'PARAMETER',@level2name=N'@session'
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Key' , @level0type=N'SCHEMA',@level0name=N'audit', @level1type=N'PROCEDURE',@level1name=N's_KVDelete', @level2type=N'PARAMETER',@level2name=N'@k'
+GO
+
+/*************************************************************************************************
+	
+	<scope>For logging</scope>
+	
+	<returns> 
+		<return code="0"	message="Success"	type="Success" /> 
+	</returns>
+	
+	<samples> 
+		<sample>
+		   <description></description>
+		   <code></code> 
+		</sample>
+	</samples> 
+
+	<historylog> 
+		<log revision="1.0" date="05/22/2015" modifier="David Sumlin">Created</log> 
+        <log revision="1.1" date="05/22/2015" modifier="David Sumlin">Added common parameters to add to KVStore</log> 
+        <log revision="1.2" date="05/23/2015" modifier="David Sumlin">Added better error handling and changed dates to datetime2 instead of timeoffset</log> 
+	</historylog>         
+
+**************************************************************************************************/
+CREATE PROCEDURE [audit].[s_KVLog]
+(
+	@session uniqueidentifier, 
+	@clear bit = 0
+)
+AS
+SET NOCOUNT ON
+SET XACT_ABORT ON
+
+	DECLARE @err_sec varchar(128) = NULL,
+            @xml xml,
+            @output varchar(max),
+            @k varchar(100),
+            @v sql_variant,
+            @db_id sql_variant,
+            @obj_id sql_variant;
+
+    -- validate input variables
+    IF @session IS NULL
+        RAISERROR('@session can''t be NULL',16,1);
+
+    IF NOT EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session)
+        RAISERROR('@session value does not exist',16,1);
+
+    SET @clear = COALESCE(@clear,0);
+
+	BEGIN TRY
+
+        SET @err_sec = 'client application name';
+        SET @k = 'client_nm';
+        SET @v = APP_NAME();
+        IF NOT EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session AND K = @k)
+            BEGIN
+                INSERT INTO audit.KVStore (KVStoreGID,K,V) VALUES (@session,@k,@v);
+            END
+
+        SET @err_sec = 'server name';
+        SET @k = 'srv_nm';
+        SET @v = @@SERVERNAME;
+        IF NOT EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session AND K = @k)
+            BEGIN
+                INSERT INTO audit.KVStore (KVStoreGID,K,V) VALUES (@session,@k,@v);
+            END
+
+        SET @err_sec = 'machine name';
+        SET @k = 'mach_nm';
+        SET @v = HOST_NAME();
+        IF NOT EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session AND K = @k)
+            BEGIN
+                INSERT INTO audit.KVStore (KVStoreGID,K,V) VALUES (@session,@k,@v);
+            END
+
+        SET @err_sec = 'user name';
+        SET @k = 'usr_nm';
+        SET @v = ORIGINAL_LOGIN();
+        IF NOT EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session AND K = @k)
+            BEGIN
+                INSERT INTO Audit.KVStore (KVStoreGID,K,V) VALUES (@session,@k,@v);
+            END
+
+        SET @err_sec = 'unique id';
+        SET @k = 'uid';
+        SELECT @v = @session;
+        IF NOT EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session AND K = @k)
+            BEGIN
+                INSERT INTO audit.KVStore (KVStoreGID,K,V) VALUES (@session,@k,@v);
+            END
+
+        SET @err_sec = 'object id';
+        SET @k = 'obj_id';
+        SELECT @v = 0;
+        IF NOT EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session AND K = @k)
+            BEGIN
+                INSERT INTO audit.KVStore (KVStoreGID,K,V) VALUES (@session,@k,@v);
+            END
+
+        SET @err_sec = 'database id';
+        SET @k = 'db_id';
+        SELECT @v = DB_ID()
+        IF NOT EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session AND K = @k)
+            BEGIN
+                INSERT INTO audit.KVStore (KVStoreGID,K,V) VALUES (@session,@k,@v);
+            END
+
+        SET @err_sec = 'intermediary ids';
+        SET @k = 'obj_id';
+        SELECT @obj_id = V
+        FROM audit.KVStore
+        WHERE KVStoreGID = @session
+        AND K = @k;
+
+        SET @k = 'db_id';
+        SELECT @db_id = V
+        FROM audit.KVStore
+        WHERE KVStoreGID = @session
+        AND K = @k;
+
+        SET @err_sec = 'database name';
+        SET @k = 'db_nm';
+        SET @v = COALESCE(DB_NAME(CONVERT(int,@db_id)),'');
+        IF NOT EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session AND K = @k)
+            BEGIN
+                INSERT INTO audit.KVStore (KVStoreGID,K,V) VALUES (@session,@k,@v);
+            END
+        ELSE
+            BEGIN
+                UPDATE audit.KVStore
+                SET V = @v
+                WHERE KVStoreGID = @session
+                AND K = @k;
+            END
+
+        SET @err_sec = 'schema name';
+        SET @k = 'sch_nm';
+        SET @v = COALESCE(OBJECT_SCHEMA_NAME(CONVERT(int,@obj_id),CONVERT(int,@db_id)),'');
+        IF NOT EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session AND K = @k)
+            BEGIN
+                INSERT INTO audit.KVStore (KVStoreGID,K,V) VALUES (@session,@k,@v);
+            END
+        ELSE
+            BEGIN
+                UPDATE audit.KVStore
+                SET V = @v
+                WHERE KVStoreGID = @session
+                AND K = @k;
+            END
+
+        SET @err_sec = 'object name';
+        SET @k = 'obj_nm';
+        SET @v = COALESCE(OBJECT_NAME(CONVERT(int,@obj_id), CONVERT(int,@db_id)),'');
+        IF NOT EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session AND K = @k)
+            BEGIN
+                INSERT INTO audit.KVStore (KVStoreGID,K,V) VALUES (@session,@k,@v);
+            END
+        ELSE
+            BEGIN
+                UPDATE audit.KVStore
+                SET V = @v
+                WHERE KVStoreGID = @session
+                AND K = @k;
+            END
+
+        SET @err_sec = 'convert to xml';
+        SET @output = '<event>'
+
+        SELECT  @output = @output + 
+                    '<' + LOWER(K) + '>' + 
+                    CASE 
+                        WHEN LEFT(CAST(SQL_VARIANT_PROPERTY(V,'BaseType') AS varchar(100)),4) = 'date' THEN CAST(CAST(V AS datetime2(7)) AS varchar(100))
+                        ELSE CAST(V AS varchar(MAX))
+                    END + 
+                    '</' + LOWER(K) + '>'
+        FROM audit.KVStore
+        WHERE KVStoreGID = @session;
+        
+        SET @output = @output + '</event>'
+        
+        SET @xml = TRY_CAST(@output AS xml);
+        
+        IF @xml IS NULL
+            RAISERROR('@xml is not valid xml',16,1);
+
+        SET @err_sec = 'log the event';
+        -- ### TODO: call SB queue        
+        INSERT INTO audit.EventSink (EventMessage) VALUES (@xml);
+
+        SET @err_sec = 'delete from KVStore';
+        IF @clear = 1
+            BEGIN
+                DELETE 
+                FROM audit.KVStore
+                WHERE KVStoreGID = @session;
+            END
+
+	    RETURN(0)
+				
+	END TRY
+	BEGIN CATCH
+
+	   BEGIN
+
+			-- Declare local variables so we can return them to the caller			
+			DECLARE @err_msg varchar(1000),
+					@err_severity int;
+			
+			SELECT	@err_msg = ERROR_MESSAGE(),
+					@err_severity = ERROR_SEVERITY();
+
+			-- This will forcibly rollback a transaction that is marked as uncommitable
+			IF (XACT_STATE()) = -1 AND @@TRANCOUNT > 0
+				ROLLBACK TRANSACTION
+
+			-- Log the error
+            SET @output = LEFT(COALESCE(@output,''),4000);
+			EXEC [audit].[s_AddSQLErrorLog] @section = @err_sec, @extrainfo = @output, @announce = 1;
+
+		END
+
+		-- Return error message to calling code via @@ERROR and error number via return code
+		RAISERROR (@err_msg, @err_severity, 1)
+		RETURN(ERROR_NUMBER())
+
+	END CATCH
+GO
+
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Log the values in KVStore table to Audit Log' , @level0type=N'SCHEMA',@level0name=N'audit', @level1type=N'PROCEDURE',@level1name=N's_KVLog'
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Unique session ID to identify different KV groupings in KVStore' , @level0type=N'SCHEMA',@level0name=N'audit', @level1type=N'PROCEDURE',@level1name=N's_KVLog', @level2type=N'PARAMETER',@level2name=N'@session'
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Flag to determine whether or not to delete rows in KVStore matching @session after logging them' , @level0type=N'SCHEMA',@level0name=N'audit', @level1type=N'PROCEDURE',@level1name=N's_KVLog', @level2type=N'PARAMETER',@level2name=N'@clear'
+GO
