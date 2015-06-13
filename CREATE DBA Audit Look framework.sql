@@ -17,11 +17,11 @@ ELSE
         SELECT @ext_version = CONVERT(nvarchar(100),value) FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version';
         IF @ext_version <> @version
             BEGIN
-                RAISERROR(N'You must run upgrade script or drop audit objects',16,1);
+                RAISERROR(N'You must run upgrade script or drop audit objects',20,1) WITH LOG;
             END
         ELSE
             BEGIN
-                RAISERROR(N'You can''t rerun this script without dropping objects first',16,1)
+                RAISERROR(N'You can''t rerun this script without dropping objects first',20,1) WITH LOG;
             END
     END
    
