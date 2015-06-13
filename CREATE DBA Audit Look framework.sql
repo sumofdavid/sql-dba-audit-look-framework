@@ -19,6 +19,10 @@ ELSE
             BEGIN
                 RAISERROR(N'You must run upgrade script or drop audit objects',16,1);
             END
+        ELSE
+            BEGIN
+                RAISERROR(N'You can''t rerun this script without dropping objects first',16,1)
+            END
     END
    
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
