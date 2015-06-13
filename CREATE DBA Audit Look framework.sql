@@ -5,7 +5,7 @@ SET XACT_ABORT ON;
 -- ##########################################################
 -- Change version ##.##.## upon each and every change
 -- ##########################################################
-DECLARE @version nvarchar(100) = N'01.00.00',
+DECLARE @version nvarchar(100) = N'01.00.01',
         @ext_version nvarchar(100);
 
 IF NOT EXISTS(SELECT 1 FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version')
@@ -285,12 +285,12 @@ SELECT
 FROM audit.EventSink;
 GO
 
-IF OBJECT_ID('dbo.Look','V') IS NOT NULL
+IF OBJECT_ID('dbo.v_Look','V') IS NOT NULL
     BEGIN
-        DROP VIEW dbo.Look;
+        DROP VIEW dbo.v_Look;
     END
 GO
-PRINT 'creating dbo.Look view';
+PRINT 'creating dbo.v_Look view';
 GO
 
 /*************************************************************************************************
@@ -302,10 +302,11 @@ GO
 		<log revision="1.4" date="09/13/2013" modifier="David Sumlin">Changed audit fields to only ModifiedBy and ModifiedDate</log> 
         <log revision="1.5" date="08/08/2014" modifier="David Sumlin">Removed audit date fields</log> 
         <log revision="1.6" date="06/12/2015" modifier="David Sumlin">Renamed to remove v_</log> 
+        <log revision="1.7" date="06/12/2015" modifier="David Sumlin">Renamed to add v_</log> 
 	</historylog>         
 	
 **************************************************************************************************/
-CREATE VIEW [dbo].[Look]
+CREATE VIEW [dbo].[v_Look]
 WITH SCHEMABINDING
 AS
 SELECT
