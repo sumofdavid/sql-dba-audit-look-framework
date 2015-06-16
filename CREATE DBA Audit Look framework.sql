@@ -5,7 +5,7 @@ SET XACT_ABORT ON;
 -- ##########################################################
 -- Change version ##.##.## upon each and every change
 -- ##########################################################
-DECLARE @version nvarchar(100) = N'01.00.01',
+DECLARE @version nvarchar(100) = N'01.00.02',
         @ext_version nvarchar(100);
 
 IF NOT EXISTS(SELECT 1 FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version')
@@ -674,6 +674,7 @@ GO
 		<log revision="1.4" date="11/30/2011" modifier="David Sumlin">Added @alt variable for flexibility.  Initially created to remove INSERT...EXEC functionality so proc can be used in other INSERT...EXEC scenarios</log> 
 		<log revision="1.5" date="11/30/2012" modifier="David Sumlin">Changed to use DBA schema in local database</log> 
         <log revision="1.6" date="06/12/2015" modifier="David Sumlin">Changed to use Audit.EventSink and changed schema to Audit</log> 
+        <log revision="1.7" date="06/16/2015" modifier="David Sumlin">Added err_dt to log event</log> 
 	</historylog>         
 	
 **************************************************************************************************/
@@ -724,6 +725,7 @@ SET NOCOUNT ON
     SELECT
         'error' AS evt_type,
         'alert' AS evt_status,
+        SYSUTCDATETIME() AS err_dt,
         COALESCE(@announce,'') AS err_announce,
         COALESCE(@@SPID,'')  AS err_spid,
         COALESCE(ERROR_PROCEDURE(),'') AS err_proc_nm,
