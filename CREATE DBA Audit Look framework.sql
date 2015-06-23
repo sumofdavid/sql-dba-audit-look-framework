@@ -1,11 +1,11 @@
-SET NUMERIC_ROUNDABORT OFF;
+    SET NUMERIC_ROUNDABORT OFF;
 SET ANSI_PADDING, ANSI_WARNINGS, CONCAT_NULL_YIELDS_NULL, ARITHABORT, QUOTED_IDENTIFIER, ANSI_NULLS ON;
 SET XACT_ABORT ON;
 
 -- ##########################################################
 -- Change version ##.##.## upon each and every change
 -- ##########################################################
-DECLARE @version nvarchar(100) = N'01.00.02',
+DECLARE @version nvarchar(100) = N'01.00.04',
         @ext_version nvarchar(100);
 
 IF NOT EXISTS(SELECT 1 FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version')
@@ -675,6 +675,7 @@ GO
 		<log revision="1.5" date="11/30/2012" modifier="David Sumlin">Changed to use DBA schema in local database</log> 
         <log revision="1.6" date="06/12/2015" modifier="David Sumlin">Changed to use Audit.EventSink and changed schema to Audit</log> 
         <log revision="1.7" date="06/16/2015" modifier="David Sumlin">Added err_dt to log event</log> 
+        <log revision="1.8" date="06/22/2015" modifier="David Sumlin">Added feature info to log event</log> 
 	</historylog>         
 	
 **************************************************************************************************/
@@ -727,6 +728,7 @@ SET NOCOUNT ON
         'alert' AS evt_status,
         SYSUTCDATETIME() AS err_dt,
         COALESCE(@announce,'') AS err_announce,
+        'deprecated: Procedure should not be used, use KV framework.' AS feature_info, 
         COALESCE(@@SPID,'')  AS err_spid,
         COALESCE(ERROR_PROCEDURE(),'') AS err_proc_nm,
         COALESCE(ERROR_LINE(),'') AS err_line,
@@ -789,6 +791,7 @@ GO
         <log revision="2.4" date="04/06/2015" modifier="David Sumlin">Change from inserting rows into Audit.ProcExecLog into inserting xml into Audit.EventSink.  Also added @app_nm parameter</log>
         <log revision="2.5" date="04/06/2015" modifier="David Sumlin">Removed WITH EXECUTE AS OWNER.  Was incorrect in my previous understanding.  Permission should be a schema level.</log>
         <log revision="2.6" date="06/12/2015" modifier="David Sumlin">Changed to audit schema</log>
+        <log revision="2.7" date="06/22/2015" modifier="David Sumlin">Added deprecated feature</log>
 	</historylog>         
 
 **************************************************************************************************/
@@ -845,6 +848,7 @@ SET NOCOUNT ON
         'info' AS evt_status,
         COALESCE(@app_nm,'') AS app_nm,
         COALESCE(@@SERVERNAME,'') AS srv_nm,
+        'deprecated: Procedure should not be used, use KV framework.' AS feature_info, 
         COALESCE(DB_NAME(@db_id),'') AS db_nm,
         COALESCE(OBJECT_SCHEMA_NAME(@object_id, @db_id),'') AS sch_nm,
 		@start AS bgn_dt,
