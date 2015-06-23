@@ -5,7 +5,7 @@ SET XACT_ABORT ON;
 -- ##########################################################
 -- Change version ##.##.## upon each and every change
 -- ##########################################################
-DECLARE @version nvarchar(100) = N'01.00.04',
+DECLARE @version nvarchar(100) = N'01.00.05',
         @ext_version nvarchar(100);
 
 IF NOT EXISTS(SELECT 1 FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version')
@@ -1775,6 +1775,14 @@ EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'The original s
 EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Takes a string and replaces single quotes with double single quotes.' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'FUNCTION',@level1name=N'f_QuoteString'
 GO
 
+IF OBJECT_ID('audit.s_KVAdd','P') IS NOT NULL
+    BEGIN
+        DROP PROCEDURE audit.s_KVAdd;
+    END
+GO
+PRINT 'creating audit.s_KVAdd procedure';
+GO
+
 /*************************************************************************************************
 	
 	<scope>For logging</scope>
@@ -1793,6 +1801,7 @@ GO
 	<historylog> 
 		<log revision="1.0" date="05/22/2015" modifier="David Sumlin">Created</log> 
         <log revision="1.1" date="05/22/2015" modifier="David Sumlin">Added common parameters to add to KVStore</log> 
+        <log revision="1.2" date="06/23/2015" modifier="David Sumlin">Added handling for invalid xml characters</log> 
 	</historylog>         
 
 **************************************************************************************************/
@@ -1806,6 +1815,8 @@ AS
 SET NOCOUNT ON
 SET XACT_ABORT ON
 
+    DECLARE @tmp varchar(4000);
+
     IF @session IS NULL
         RAISERROR('@session can''t be NULL',16,1);
 
@@ -1813,6 +1824,16 @@ SET XACT_ABORT ON
         RAISERROR('@k can''t be NULL',16,1);
 
     SET @v = COALESCE(@v,'');
+
+    -- this will clean up any characters which are invalid xml
+    IF SQL_VARIANT_PROPERTY(@v,'BaseType') IN ('char','varchar','nchar','nvarchar')
+        BEGIN
+            SET @tmp = CAST(@v AS varchar(4000));
+            SET @tmp = REPLACE(@tmp,'<','%lt;');
+            SET @tmp = REPLACE(@tmp,'>','%gt;');
+            SET @tmp = REPLACE(@tmp,'&','%amp;');
+            SET @v = @tmp;
+        END
 
 	BEGIN TRY
 

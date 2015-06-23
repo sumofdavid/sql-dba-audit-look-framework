@@ -15,7 +15,7 @@ ELSE
         SELECT @ext_version = CONVERT(nvarchar(100),value) FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version';
         IF @ext_version <> @old_version
             BEGIN
-                RAISERROR(N'This is the wrong upgrade script.',16,1);
+                RAISERROR(N'This is the wrong upgrade script.',20,1) WITH LOG;
             END
         ELSE
             BEGIN
