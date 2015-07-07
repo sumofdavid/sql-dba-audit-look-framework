@@ -1,3 +1,8 @@
+**Version 01.00.06**
+
+* added code to add data type information as xml attributes
+* added audit framework revision to xml event
+
 **Version 01.00.05**
 
 * added code to encode invalid xml characters for eventsink

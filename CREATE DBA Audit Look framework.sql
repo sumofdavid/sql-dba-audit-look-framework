@@ -5,7 +5,7 @@ SET XACT_ABORT ON;
 -- ##########################################################
 -- Change version ##.##.## upon each and every change
 -- ##########################################################
-DECLARE @version nvarchar(100) = N'01.00.05',
+DECLARE @version nvarchar(100) = N'01.00.06',
         @ext_version nvarchar(100);
 
 IF NOT EXISTS(SELECT 1 FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version')
@@ -1884,6 +1884,15 @@ EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Key' , @level0
 EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Value' , @level0type=N'SCHEMA',@level0name=N'audit', @level1type=N'PROCEDURE',@level1name=N's_KVAdd', @level2type=N'PARAMETER',@level2name=N'@v'
 GO
 
+IF OBJECT_ID('audit.s_KVDelete','P') IS NOT NULL
+    BEGIN
+        DROP PROCEDURE audit.s_KVDelete;
+    END
+GO
+
+PRINT 'creating audit.s_KVDelete procedure';
+GO
+
 /*************************************************************************************************
 	
 	<scope>For logging</scope>
@@ -1960,6 +1969,15 @@ EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Unique session
 EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Key' , @level0type=N'SCHEMA',@level0name=N'audit', @level1type=N'PROCEDURE',@level1name=N's_KVDelete', @level2type=N'PARAMETER',@level2name=N'@k'
 GO
 
+IF OBJECT_ID('audit.s_KVLog','P') IS NOT NULL
+    BEGIN
+        DROP PROCEDURE audit.s_KVLog;
+    END
+GO
+
+PRINT 'creating audit.s_KVLog procedure';
+GO
+
 /*************************************************************************************************
 	
 	<scope>For logging</scope>
@@ -1979,10 +1997,11 @@ GO
 		<log revision="1.0" date="05/22/2015" modifier="David Sumlin">Created</log> 
         <log revision="1.1" date="05/22/2015" modifier="David Sumlin">Added common parameters to add to KVStore</log> 
         <log revision="1.2" date="05/23/2015" modifier="David Sumlin">Added better error handling and changed dates to datetime2 instead of timeoffset</log> 
+        <log revision="1.3" date="07/06/2015" modifier="David Sumlin">Added attributes to XML to add data type information, also add audit framework revision</log> 
 	</historylog>         
 
 **************************************************************************************************/
-CREATE PROCEDURE [audit].[s_KVLog]
+CREATE PROCEDURE [Audit].[s_KVLog]
 (
 	@session uniqueidentifier, 
 	@clear bit = 0
@@ -2066,6 +2085,14 @@ SET XACT_ABORT ON
                 INSERT INTO audit.KVStore (KVStoreGID,K,V) VALUES (@session,@k,@v);
             END
 
+        SET @err_sec = 'audit framework revision';
+        SET @k = 'audit_framework_rev';
+        SELECT @V = CONVERT(nvarchar(100),value) FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version';
+        IF NOT EXISTS(SELECT 1 FROM audit.KVStore WHERE KVStoreGID = @session AND K = @k)
+            BEGIN
+                INSERT INTO audit.KVStore (KVStoreGID,K,V) VALUES (@session,@k,@v);
+            END
+
         SET @err_sec = 'intermediary ids';
         SET @k = 'obj_id';
         SELECT @obj_id = V
@@ -2128,9 +2155,14 @@ SET XACT_ABORT ON
         SET @output = '<event>'
 
         SELECT  @output = @output + 
-                    '<' + LOWER(K) + '>' + 
+                    '<' + LOWER(K) + ' data_type="' + CAST(SQL_VARIANT_PROPERTY(V,'BaseType') AS varchar(128)) + '" precision="' + CAST(SQL_VARIANT_PROPERTY(V,'Precision') AS varchar(10)) + '" scale="' + CAST(SQL_VARIANT_PROPERTY(V,'Scale') AS varchar(10)) + '" MaxLength="' + CAST(SQL_VARIANT_PROPERTY(V,'MaxLength') AS varchar(10)) + '">' + 
                     CASE 
-                        WHEN LEFT(CAST(SQL_VARIANT_PROPERTY(V,'BaseType') AS varchar(100)),4) = 'date' THEN CAST(CAST(V AS datetime2(7)) AS varchar(100))
+                        WHEN CAST(SQL_VARIANT_PROPERTY(V,'BaseType') AS varchar(100)) = 'datetimeoffset' THEN CONVERT(varchar(100),V,21)
+                        WHEN CAST(SQL_VARIANT_PROPERTY(V,'BaseType') AS varchar(100)) = 'date' THEN CONVERT(varchar(100),V,21)
+                        WHEN CAST(SQL_VARIANT_PROPERTY(V,'BaseType') AS varchar(100)) = 'datetime' THEN CONVERT(varchar(100),V,21)
+                        WHEN CAST(SQL_VARIANT_PROPERTY(V,'BaseType') AS varchar(100)) = 'datetime2' THEN CONVERT(varchar(100),V,21)
+                        WHEN CAST(SQL_VARIANT_PROPERTY(V,'BaseType') AS varchar(100)) = 'smalldatetime' THEN CONVERT(varchar(100),V,21)
+                        WHEN CAST(SQL_VARIANT_PROPERTY(V,'BaseType') AS varchar(100)) = 'time' THEN CONVERT(varchar(100),V,21)
                         ELSE CAST(V AS varchar(MAX))
                     END + 
                     '</' + LOWER(K) + '>'
