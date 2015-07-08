@@ -1,11 +1,12 @@
-    SET NUMERIC_ROUNDABORT OFF;
+SET NOCOUNT ON;
+SET NUMERIC_ROUNDABORT OFF;
 SET ANSI_PADDING, ANSI_WARNINGS, CONCAT_NULL_YIELDS_NULL, ARITHABORT, QUOTED_IDENTIFIER, ANSI_NULLS ON;
 SET XACT_ABORT ON;
 
 -- ##########################################################
 -- Change version ##.##.## upon each and every change
 -- ##########################################################
-DECLARE @version nvarchar(100) = N'01.00.06',
+DECLARE @version nvarchar(100) = N'01.00.07',
         @ext_version nvarchar(100);
 
 IF NOT EXISTS(SELECT 1 FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version')
@@ -676,6 +677,7 @@ GO
         <log revision="1.6" date="06/12/2015" modifier="David Sumlin">Changed to use Audit.EventSink and changed schema to Audit</log> 
         <log revision="1.7" date="06/16/2015" modifier="David Sumlin">Added err_dt to log event</log> 
         <log revision="1.8" date="06/22/2015" modifier="David Sumlin">Added feature info to log event</log> 
+        <log revision="1.9" date="07/08/2015" modifier="David Sumlin">Changed to use KVLog functionality</log>
 	</historylog>         
 	
 **************************************************************************************************/
@@ -721,33 +723,44 @@ SET NOCOUNT ON
         @event_type = [EventType]
     FROM @err_tbl;
 
-	SET @xml = 
-    (
-    SELECT
-        'error' AS evt_type,
-        'alert' AS evt_status,
-        SYSUTCDATETIME() AS err_dt,
-        COALESCE(@announce,'') AS err_announce,
-        'deprecated: Procedure should not be used, use KV framework.' AS feature_info, 
-        COALESCE(@@SPID,'')  AS err_spid,
-        COALESCE(ERROR_PROCEDURE(),'') AS err_proc_nm,
-        COALESCE(ERROR_LINE(),'') AS err_line,
-        COALESCE(ERROR_NUMBER(),'') AS err_num,
-        COALESCE(ERROR_MESSAGE(),'') AS err_msg,
-        COALESCE(ERROR_SEVERITY(),'') AS err_lvl,
-        COALESCE(ERROR_STATE(),'') AS err_state,
-        COALESCE(@@SERVERNAME,'') AS srv_nm,
-        COALESCE(DB_NAME(),'') AS db_nm,
-		COALESCE(@section,'') AS sec_nm,
-		COALESCE(@event_info,'') AS evt_txt,
-		COALESCE(@event_type,'') AS evt_info,
-        COALESCE(HOST_NAME(),'') AS mach_nm,
-        COALESCE(ORIGINAL_LOGIN(),'') AS usr_nm
-        FOR XML RAW ('event'), ELEMENTS
-    );
+    DECLARE @db_nm sysname = DB_NAME(),
+            @mach_nm sysname = HOST_NAME(),
+            @usr_nm sysname = ORIGINAL_LOGIN(),
+            @err_dt datetime2(7) = SYSUTCDATETIME(),
+            @err_proc_nm sysname = ERROR_PROCEDURE(),
+            @err_line int = ERROR_LINE(),
+            @err_num int = ERROR_NUMBER(),
+            @err_msg nvarchar(4000) = ERROR_MESSAGE(),
+            @err_lvl int = ERROR_SEVERITY(),
+            @err_state int = ERROR_STATE(),
+            @version uniqueidentifier = NEWID()
+    
 
-    -- Log it
-    INSERT INTO audit.EventSink (EventMessage) VALUES (@xml)
+    SET @announce = COALESCE(@announce,'');
+    
+    -- log new style
+    EXEC audit.s_KVAdd @version, 'evt_type', 'error';
+    EXEC audit.s_KVAdd @version, 'evt_status', 'alert';
+    EXEC audit.s_KVAdd @version, 'err_dt', @err_dt;
+    EXEC audit.s_KVAdd @version, 'err_announce', @announce;
+    EXEC audit.s_KVAdd @version, 'feature_info', 'deprecated: Procedure should not be used, use KV framework.';
+    EXEC audit.s_KVAdd @version, 'err_spid', @@SPID;    
+    EXEC audit.s_KVAdd @version, 'err_proc_nm', @err_proc_nm;    
+    EXEC audit.s_KVAdd @version, 'err_line', @err_line;    
+    EXEC audit.s_KVAdd @version, 'err_num', @err_num;    
+    EXEC audit.s_KVAdd @version, 'err_msg', @err_msg;    
+    EXEC audit.s_KVAdd @version, 'err_lvl', @err_lvl;    
+    EXEC audit.s_KVAdd @version, 'err_state', @err_state;    
+    EXEC audit.s_KVAdd @version, 'srv_nm', @@SERVERNAME;
+    EXEC audit.s_KVAdd @version, 'db_nm', @db_nm;
+    EXEC audit.s_KVAdd @version, 'uid', @version;
+    EXEC audit.s_KVAdd @version, 'sec_nm', @section;
+    EXEC audit.s_KVAdd @version, 'evt_txt', @event_info;
+    EXEC audit.s_KVAdd @version, 'evt_info', @event_type;
+    EXEC audit.s_KVAdd @version, 'mach_nm', @mach_nm;
+    EXEC audit.s_KVAdd @version, 'usr_nm', @usr_nm;
+    EXEC audit.s_KVAdd @version, 'alt_msg', @alt;
+    EXEC audit.s_KVLog @version, 1;
 
 GO
 
@@ -792,6 +805,7 @@ GO
         <log revision="2.5" date="04/06/2015" modifier="David Sumlin">Removed WITH EXECUTE AS OWNER.  Was incorrect in my previous understanding.  Permission should be a schema level.</log>
         <log revision="2.6" date="06/12/2015" modifier="David Sumlin">Changed to audit schema</log>
         <log revision="2.7" date="06/22/2015" modifier="David Sumlin">Added deprecated feature</log>
+        <log revision="2.8" date="07/08/2015" modifier="David Sumlin">Changed to use KVLog functionality</log>
 	</historylog>         
 
 **************************************************************************************************/
@@ -841,33 +855,38 @@ SET NOCOUNT ON
         @event_info = [EventInfo] 
     FROM @dbcc_tbl;
 
-	SET @xml = 
-    (
-    SELECT
-        'proc exec' AS evt_type,
-        'info' AS evt_status,
-        COALESCE(@app_nm,'') AS app_nm,
-        COALESCE(@@SERVERNAME,'') AS srv_nm,
-        'deprecated: Procedure should not be used, use KV framework.' AS feature_info, 
-        COALESCE(DB_NAME(@db_id),'') AS db_nm,
-        COALESCE(OBJECT_SCHEMA_NAME(@object_id, @db_id),'') AS sch_nm,
-		@start AS bgn_dt,
-		@end AS end_dt,
-		COALESCE(@db_id,0) AS [db_id],
-		COALESCE(@version,NEWID()) AS [uid],
-		COALESCE(@object_id,0) AS obj_id,
-		COALESCE(OBJECT_NAME(@object_id, @db_id),COALESCE(@object_nm,'unknown')) AS obj_nm,
-		COALESCE(@section,'') AS sec_nm,
-		COALESCE(@event_info,'') AS evt_txt,
-		COALESCE(@extra_info,'') AS evt_info,
-		COALESCE(@rows,'') AS [rows],
-        COALESCE(HOST_NAME(),'') AS mach_nm,
-        COALESCE(ORIGINAL_LOGIN(),'') AS usr_nm
-        FOR XML RAW ('event'), ELEMENTS
-    );
 
-    -- Log it
-    INSERT INTO audit.EventSink (EventMessage) VALUES (@xml)
+    DECLARE @db_nm sysname = DB_NAME(@db_id),
+            @sch_nm sysname = OBJECT_SCHEMA_NAME(@object_id, @db_id),
+            @obj_nm sysname = COALESCE(OBJECT_NAME(@object_id, @db_id),COALESCE(@object_nm,'unknown')),
+            @mach_nm sysname = HOST_NAME(),
+            @usr_nm sysname = ORIGINAL_LOGIN();
+    
+    SET @db_id = COALESCE(@db_id,0);
+    SET @version = COALESCE(@version,NEWID());
+    SET @object_id = COALESCE(@object_id,0);
+
+    -- log new style
+    EXEC audit.s_KVAdd @version, 'evt_type', 'proc exec';
+    EXEC audit.s_KVAdd @version, 'evt_status', 'info';
+    EXEC audit.s_KVAdd @version, 'app_nm', @app_nm;    
+    EXEC audit.s_KVAdd @version, 'srv_nm', @@SERVERNAME;
+    EXEC audit.s_KVAdd @version, 'feature_info', 'deprecated: Procedure should not be used, use KV framework.';
+    EXEC audit.s_KVAdd @version, 'db_nm', @db_nm;
+    EXEC audit.s_KVAdd @version, 'sch_nm', @sch_nm;    
+    EXEC audit.s_KVAdd @version, 'bgn_dt', @start;
+    EXEC audit.s_KVAdd @version, 'end_dt', @end;
+    EXEC audit.s_KVAdd @version, 'db_id', @db_id;
+    EXEC audit.s_KVAdd @version, 'uid', @version;
+    EXEC audit.s_KVAdd @version, 'obj_id', @object_id;
+    EXEC audit.s_KVAdd @version, 'obj_nm', @obj_nm;
+    EXEC audit.s_KVAdd @version, 'sec_nm', @section;
+    EXEC audit.s_KVAdd @version, 'evt_txt', @event_info;
+    EXEC audit.s_KVAdd @version, 'evt_info', @extra_info;
+    EXEC audit.s_KVAdd @version, 'rows', @rows;
+    EXEC audit.s_KVAdd @version, 'mach_nm', @mach_nm;
+    EXEC audit.s_KVAdd @version, 'usr_nm', @usr_nm;
+    EXEC audit.s_KVLog @version, 1;
 
 GO
 

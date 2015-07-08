@@ -1,3 +1,7 @@
+**Version 01.00.07**
+
+* changed code in legacy error and procedure logging procedures to utilize s_KVAdd and s_KVLog instead of writing to EventSink directly
+
 **Version 01.00.06**
 
 * added code to add data type information as xml attributes
