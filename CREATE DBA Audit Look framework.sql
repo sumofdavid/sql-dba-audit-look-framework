@@ -6,7 +6,7 @@ SET XACT_ABORT ON;
 -- ##########################################################
 -- Change version ##.##.## upon each and every change
 -- ##########################################################
-DECLARE @version nvarchar(100) = N'01.00.07',
+DECLARE @version nvarchar(100) = N'01.00.08',
         @ext_version nvarchar(100);
 
 IF NOT EXISTS(SELECT 1 FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version')
@@ -65,76 +65,6 @@ IF OBJECT_ID('audit.KVStore','U') IS NULL
             )
         );
     END
-    
--- removed because of new EventSink table
---IF OBJECT_ID('DBA.LogSQLError','U') IS NULL
---    BEGIN
---        PRINT 'creating DBA.LogSQLError table';
---        CREATE TABLE [DBA].[LogSQLError]
---        (
---            [SQLErrorProcedure] [nvarchar] (128) NULL,
---            [SQLErrorLineNumber] [int] NULL,
---            [SQLErrorNumber] [int] NULL,
---            [SQLErrorMessage] [nvarchar] (2048) NULL,
---            [SQLErrorSeverity] [int] NULL,
---            [SQLErrorState] [int] NULL,
---            [SQLErrorProcedureSection] [nvarchar] (128) NULL,
---            [SQLErrorSPID] [int] NULL,
---            [SQLErrorEventType] [nvarchar] (30) NULL,
---            [SQLErrorParameter] [int] NULL,
---            [SQLErrorEventInfo] [nvarchar] (4000) NULL,
---            [SQLErrorExtraInfo] [nvarchar] (4000) NULL,
---            [SQLErrorAnnounce] [int] NULL CONSTRAINT [df_DBA_LogSQLError_SQLErrorAnnounce] DEFAULT ((1)),
---            [CreatedDate] [datetimeoffset] NOT NULL CONSTRAINT [df_DBA_LogSQLError_CreatedDate] DEFAULT (sysdatetimeoffset()),
---            [CreatedBy] [nvarchar] (128) NOT NULL CONSTRAINT [df_DBA_LogSQLError_CreatedBy] DEFAULT (original_login()),
---            [CreatedByMachine] [nvarchar] (128) NULL
---        );
-
---        CREATE CLUSTERED INDEX [clx_DBA_LogSQLError] ON [DBA].[LogSQLError] ([CreatedDate]);
---        CREATE NONCLUSTERED INDEX [ix_DBA_LogSQLError_SQLErrorProcedure] ON [DBA].[LogSQLError] ([SQLErrorProcedure]);
---        CREATE NONCLUSTERED INDEX [ix_DBA_LogSQLError_CreatedDate] ON [DBA].[LogSQLError] ([CreatedDate]);
---    END
-
--- removed because of new EventSink table
---IF OBJECT_ID('DBA.LogProcExec','U') IS NULL
---    BEGIN
---        PRINT 'creating DBA.LogProcExec table';
---        CREATE TABLE [DBA].[LogProcExec]
---        (
---            [LogProcExecGID] [bigint] NOT NULL IDENTITY(1, 1) CONSTRAINT [pk_DBA_LogProcExec] PRIMARY KEY NONCLUSTERED,
---            [ProcExecVersion] [uniqueidentifier] NOT NULL CONSTRAINT [df_DBA_LogProcExec_ProcExecVersion] DEFAULT (newid()),
---            [ProcExecStartTime] [datetimeoffset] NOT NULL CONSTRAINT [df_DBA_LogProcExec_ProcExecStartTime] DEFAULT (sysdatetimeoffset()),
---            [ProcExecEndTime] [datetimeoffset] NULL,
---            [DatabaseID] [int] NOT NULL,
---            [ObjectID] [int] NOT NULL,
---            [ProcName] [varchar] (300) NOT NULL,
---            [ProcSection] [varchar] (300) NULL,
---            [ProcText] [nvarchar] (4000) NULL,
---            [RowsAffected] [int] NULL,
---            [ExtraInfo] [nvarchar] (2000) NULL,
---            [CreatedBy] [nvarchar] (128) NOT NULL CONSTRAINT [df_DBA_LogProcExec_CreatedBy] DEFAULT (original_login()),
---            [CreatedByMachine] [nvarchar] (128) NULL CONSTRAINT [df_DBA_LogProcExec_CreatedByMachine] DEFAULT (host_name())
---        );
-
---        CREATE CLUSTERED INDEX [clx_DBA_LogProcExec] ON [DBA].[LogProcExec] ([ProcExecStartTime]);
---        CREATE NONCLUSTERED INDEX [ix_DBA_LogProcExec_ProcName] ON [DBA].[LogProcExec] ([ProcName], [ProcSection]);
-
---    END
-
--- not implemented yet
---IF OBJECT_ID('DBA.TableLoadStatus','U') IS NULL
---    BEGIN
---        PRINT 'creating DBA.TableLoadStatus table';
---        CREATE TABLE DBA.TableLoadStatus
---        (
---            TableLoadStatusGID int NOT NULL IDENTITY(1,1) CONSTRAINT pk_DBA_TableLoadStatus PRIMARY KEY NONCLUSTERED,
---            TableName varchar(300) NOT NULL,
---            LoadTimestamp datetimeoffset NOT NULL CONSTRAINT df_DBA_TableLoadStatus_LoadTimestamp DEFAULT (SYSDATETIMEOFFSET()),
---            ModifiedBy nvarchar(128) NOT NULL CONSTRAINT df_DBA_TableLoadStatus_ModifiedBy DEFAULT (ORIGINAL_LOGIN())
---        );
-
---        CREATE UNIQUE CLUSTERED INDEX clx_DBA_TableLoadStatus ON DBA.TableLoadStatus (TableName,LoadTimestamp);
---    END
 
 IF OBJECT_ID('base.LookType','U') IS NULL
     BEGIN
@@ -239,7 +169,6 @@ IF OBJECT_ID('audit.AuditConfig','U') IS NULL
             );
     END
 GO
-
 
 
 PRINT '--- creating views'
@@ -962,6 +891,7 @@ GO
 		<log revision="2.8" date="12/11/2012" modifier="David Sumlin">Fixed DROP TRIGGER section</log>
         <log revision="2.9" date="10/25/2014" modifier="David Sumlin">Removed custom error code and just put in text message</log>
         <log revision="3.0" date="04/06/2015" modifier="David Sumlin">Changed to use datetimeoffset for logging date/times, and added @app_nm parameter</log>
+        <log revision="3.1" date="07/09/2015" modifier="David Sumlin">Changed to use KV for error handling and logging</log>
 	</historylog>         
 
 **************************************************************************************************/
@@ -981,33 +911,57 @@ SET NOCOUNT ON
 SET XACT_ABORT ON
 
 	-- Auditing variables
-	DECLARE @err_sec [varchar](128) = '',
+	DECLARE @err_sec varchar(128) = NULL,
 			@exec_start datetimeoffset(7) = SYSDATETIMEOFFSET(),
-			@exec_end datetimeoffset(7) = NULL,
+			@sec_exec_start datetimeoffset(7) = SYSDATETIMEOFFSET(),			
+			@exec_end datetimeoffset(7) = SYSDATETIMEOFFSET(),
 			@params nvarchar(2000) = NULL,
 			@rows int = 0,
-			@db_id int = DB_ID()
+            @version uniqueidentifier = NULL,
+			@db_id int = DB_ID();
+
+    -- Common variables
+    DECLARE @ret_val int,
+            @sql nvarchar(MAX) = N'',
+		    @crlf nvarchar(1) = NCHAR(13),
+		    @tab nvarchar(1) = NCHAR(9);
 
 	-- local variables
-	DECLARE @sql nvarchar(4000) = '',
-			@full_object_name nvarchar(1000),
+	DECLARE @full_object_name nvarchar(1000),
 			@schema_object_name nvarchar(1000),
 			@schema_qualifier_name nvarchar(1000)
 
-	SELECT @params = N'@object_name = ''' + ISNULL(@object_name,N'NULL') + ''' , ' + 
-					N'@object_type = ''' + ISNULL(@object_type,N'NULL') + ''' , ' + 
-					N'@schema_name = ''' + ISNULL(@schema_name,N'NULL') + ''' , ' +
-					N'@db_name = ''' + ISNULL(@db_name,N'NULL') + ''' , ' +
-					N'@qualifier_name = ''' + ISNULL(@qualifier_name,N'NULL') + ''' , ' +
-					N'@debug = ' + ISNULL(CAST(@debug AS nvarchar(4)),N'NULL')
+    SET @err_sec = 'log parameters';
+	SET @params =   N'@object_name = ' + COALESCE('''' + CAST(@object_name AS nvarchar(128)) + '''',N'NULL') + N' , ' +
+                    N'@object_type = ' + COALESCE('''' + CAST(@object_type AS nvarchar(128)) + '''',N'NULL') + N' , ' +
+					N'@schema_name = ' + COALESCE('''' + CAST(@schema_name AS nvarchar(128)) + '''',N'NULL') + N' , ' +
+                    N'@db_name = ' + COALESCE('''' + CAST(@db_name AS nvarchar(128)) + '''',N'NULL') + N' , ' +
+					N'@qualifier_name = ' + COALESCE('''' + CAST(@qualifier_name AS nvarchar(128)) + '''',N'NULL') + N' , ' +
+                    N'@log_id = ' + COALESCE('''' + CAST(@log_id AS nvarchar(128)) + '''',N'NULL') + N' , ' +
+                    N'@app_nm = ' + COALESCE('''' + CAST(@app_nm AS nvarchar(128)) + '''',N'NULL') + N' , ' +
+					N'@debug = ' + COALESCE(CAST(@debug AS nvarchar(4)),N'NULL');
 
 	BEGIN TRY
 
 		SET @err_sec = 'Validate parameters'			
 
-		-- Make sure that @debug is set
-		IF @debug IS NULL
-			SET @debug = 0
+        SET @log_id = COALESCE(@log_id,NEWID());
+        SET @version = @log_id; -- basically to avoid having to change the proc signature
+        SET @debug = COALESCE(@debug,0);
+
+        SET @err_sec = 'begin logging'
+        EXEC audit.s_KVAdd @version, 'evt_type', 'proc exec';
+        EXEC audit.s_KVAdd @version, 'evt_status', 'info';
+        EXEC audit.s_KVAdd @version, 'uid', @version;
+        EXEC audit.s_KVAdd @version, 'sec_nm', @err_sec;
+        EXEC audit.s_KVAdd @version, 'bgn_dt', @exec_start;
+        EXEC audit.s_KVAdd @version, 'end_dt', @exec_end;
+        EXEC audit.s_KVAdd @version, 'evt_info', @params;
+        EXEC audit.s_KVAdd @version, 'obj_id', @@PROCID;
+        EXEC audit.s_KVAdd @version, 'db_id', @db_id;
+        EXEC audit.s_KVAdd @version, 'app_nm', @app_nm;
+        EXEC audit.s_KVLog @version, 0;
+        SET @sec_exec_start = SYSDATETIMEOFFSET();
 			
 		-- Raise an error if @object_name is null or blank
 		IF @object_name IS NULL OR @object_name = ''
@@ -1182,36 +1136,82 @@ SET XACT_ABORT ON
 				RAISERROR(50013,15,1, '@object_type')
 			END
 		
-		-- Audit action
+		SET @rows = @@ROWCOUNT;
+		SET @err_sec = 'end logging';
 		SET @exec_end = SYSDATETIMEOFFSET();
-		EXEC [audit].[s_AddProcExecLog] @db_id = @db_id, @object_id = @@PROCID, @start = @exec_start, @end = @exec_end, @extra_info = @params, @rows = @rows, @section = @err_sec, @version = @log_id, @app_nm = @app_nm;
+        EXEC audit.s_KVAdd @version, 'sec_nm', @err_sec;
+        EXEC audit.s_KVAdd @version, 'rows', @rows;
+        EXEC audit.s_KVAdd @version, 'bgn_dt', @exec_start;
+        EXEC audit.s_KVAdd @version, 'end_dt', @exec_end;
+        EXEC audit.s_KVAdd @version, 'app_nm', @app_nm;
+        EXEC audit.s_KVLog @version, 1;
 
 		RETURN (0)
 
 	END TRY
 	BEGIN CATCH
 
-		-- Declare local variables so we can return them to the caller			
-		DECLARE @err_msg varchar(1000),
-				@err_severity int
-		
-		SELECT	@err_msg = ERROR_MESSAGE(),
-				@err_severity = ERROR_SEVERITY()
+        DECLARE @err_dt datetime2(7) = SYSUTCDATETIME(),
+                @err_proc_nm sysname = ERROR_PROCEDURE(),
+                @err_line int = ERROR_LINE(),
+                @err_num int = ERROR_NUMBER(),
+                @err_msg nvarchar(4000) = ERROR_MESSAGE(),
+                @err_lvl int = ERROR_SEVERITY(),
+                @err_state int = ERROR_STATE(),
+                @log_db_nm sysname = DB_NAME(),
+                @cmd varchar(1000),
+                @event_info nvarchar(4000);
+
+	    -- use this table to hold the info from DBCC INPUTBUFFER
+	    DECLARE @err_tbl table 
+		    (
+			    [EventType] nvarchar(30) NULL, 
+			    [Parameters] int NULL, 
+			    [EventInfo] nvarchar(4000) NULL
+		    )
+
+		-- We're calling this to get the code that was originally executing
+		SET @cmd = 'DBCC INPUTBUFFER( ' + CAST(@@spid as varchar) + ') WITH NO_INFOMSGS'
+
+		INSERT INTO @err_tbl 
+		EXEC(@cmd)
+
+        SELECT 
+            @event_info = [EventInfo]
+        FROM @err_tbl;
 
 		-- This will forcibly rollback a transaction that is marked as uncommitable
 		IF (XACT_STATE()) = -1 AND @@TRANCOUNT > 0
 			ROLLBACK TRANSACTION
 
-		-- Log the error
-		EXEC [audit].[s_AddSQLErrorLog] @section = @err_sec, @extrainfo = @params, @announce = 1
+        -- log the error
+        EXEC audit.s_KVAdd @version, 'evt_type', 'error';
+        EXEC audit.s_KVAdd @version, 'evt_status', 'alert';
+        EXEC audit.s_KVAdd @version, 'err_dt', @err_dt;
+        EXEC audit.s_KVAdd @version, 'err_announce', 1;
+        EXEC audit.s_KVAdd @version, 'err_spid', @@SPID;    
+        EXEC audit.s_KVAdd @version, 'err_proc_nm', @err_proc_nm;    
+        EXEC audit.s_KVAdd @version, 'err_line', @err_line;    
+        EXEC audit.s_KVAdd @version, 'err_num', @err_num;    
+        EXEC audit.s_KVAdd @version, 'err_msg', @err_msg;    
+        EXEC audit.s_KVAdd @version, 'err_lvl', @err_lvl;    
+        EXEC audit.s_KVAdd @version, 'err_state', @err_state;    
+        EXEC audit.s_KVAdd @version, 'srv_nm', @@SERVERNAME;
+        EXEC audit.s_KVAdd @version, 'db_nm', @log_db_nm;
+        EXEC audit.s_KVAdd @version, 'uid', @version;
+        EXEC audit.s_KVAdd @version, 'sec_nm', @err_sec;
+        EXEC audit.s_KVAdd @version, 'app_nm', @app_nm;
+        EXEC audit.s_KVAdd @version, 'evt_txt', @event_info;
+        EXEC audit.s_KVAdd @version, 'evt_info', @params;
+        EXEC audit.s_KVLog @version, 1;
 
 		-- Return error message to calling code via @@ERROR and error number via return code
-		RAISERROR (@err_msg, @err_severity, 1)
+		RAISERROR (@err_msg, @err_lvl, 1)
 		RETURN(ERROR_NUMBER())
 
 	END CATCH
 GO
-
+    
 IF OBJECT_ID('dbo.s_LookTypeUpsert','P') IS NOT NULL
     BEGIN
         DROP PROCEDURE dbo.s_LookTypeUpsert;
@@ -2017,6 +2017,7 @@ GO
         <log revision="1.1" date="05/22/2015" modifier="David Sumlin">Added common parameters to add to KVStore</log> 
         <log revision="1.2" date="05/23/2015" modifier="David Sumlin">Added better error handling and changed dates to datetime2 instead of timeoffset</log> 
         <log revision="1.3" date="07/06/2015" modifier="David Sumlin">Added attributes to XML to add data type information, also add audit framework revision</log> 
+        <log revision="1.4" date="07/09/2015" modifier="David Sumlin">Removed error logging, since it would create an endless cycle</log> 
 	</historylog>         
 
 **************************************************************************************************/
@@ -2224,10 +2225,6 @@ SET XACT_ABORT ON
 			-- This will forcibly rollback a transaction that is marked as uncommitable
 			IF (XACT_STATE()) = -1 AND @@TRANCOUNT > 0
 				ROLLBACK TRANSACTION
-
-			-- Log the error
-            SET @output = LEFT(COALESCE(@output,''),4000);
-			EXEC [audit].[s_AddSQLErrorLog] @section = @err_sec, @extrainfo = @output, @announce = 1;
 
 		END
 

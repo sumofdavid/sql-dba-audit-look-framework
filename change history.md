@@ -1,3 +1,8 @@
+**Version 01.00.08**
+
+* altered s_dropobject to use new KV logging functionality
+* removed error logging in s_KVLog, since it would create an endless cycle
+
 **Version 01.00.07**
 
 * changed code in legacy error and procedure logging procedures to utilize s_KVAdd and s_KVLog instead of writing to EventSink directly
