@@ -1,4 +1,35 @@
+PRINT '-- deleting audit triggers';
+EXEC Audit.s_RecreateTableTriggers
+    @remove_triggers_only = 1,
+    @actions = 7;
+GO
+
 PRINT '--- deleting objects';
+IF OBJECT_ID('audit.s_LogAuditChanges','P') IS NOT NULL
+    BEGIN
+        PRINT 'drop audit.s_LogAuditChanges procedure';
+        DROP PROCEDURE audit.s_LogAuditChanges;
+    END
+GO
+IF OBJECT_ID('audit.s_KVAdd','P') IS NOT NULL
+    BEGIN
+        PRINT 'drop audit.s_KVAdd procedure';
+        DROP PROCEDURE audit.s_KVAdd;
+    END
+GO
+IF OBJECT_ID('audit.s_KVDelete','P') IS NOT NULL
+    BEGIN
+        PRINT 'drop audit.s_KVDelete procedure';
+        DROP PROCEDURE audit.s_KVDelete;
+    END
+GO
+IF OBJECT_ID('audit.s_KVLog','P') IS NOT NULL
+    BEGIN
+        PRINT 'drop audit.s_KVLog procedure';
+        DROP PROCEDURE audit.s_KVLog;
+    END
+GO
+
 IF OBJECT_ID('Audit.s_RecreateTableTriggers','P') IS NOT NULL
     BEGIN
         PRINT 'drop Audit.s_RecreateTableTriggers procedure';
@@ -41,6 +72,18 @@ IF OBJECT_ID('DBA.s_AddSQLErrorLog','P') IS NOT NULL
         DROP PROCEDURE DBA.s_AddSQLErrorLog;
     END
 GO
+IF OBJECT_ID('audit.s_AddProcExecLog','P') IS NOT NULL
+    BEGIN
+        PRINT 'drop audit.s_AddProcExecLog procedure';
+        DROP PROCEDURE audit.s_AddProcExecLog;
+    END
+GO
+IF OBJECT_ID('audit.s_AddSQLErrorLog','P') IS NOT NULL
+    BEGIN
+        PRINT 'drop audit.s_AddSQLErrorLog procedure';
+        DROP PROCEDURE audit.s_AddSQLErrorLog;
+    END
+GO
 
 IF OBJECT_ID('Audit.f_GetAuditSQL','FN') IS NOT NULL
     BEGIN
@@ -77,6 +120,13 @@ IF OBJECT_ID('Audit.v_AuditKey','V') IS NOT NULL
     END
 GO
 
+IF OBJECT_ID('Audit.v_EventSink','V') IS NOT NULL
+    BEGIN
+        PRINT 'drop Audit.v_EventSink view';
+        DROP VIEW Audit.v_EventSink;
+    END
+GO
+
 IF OBJECT_ID('dbo.v_Look','V') IS NOT NULL
     BEGIN
         PRINT 'drop dbo.v_Look view';
@@ -98,17 +148,17 @@ IF OBJECT_ID('Audit.AuditConfig','U') IS NOT NULL
     END
 GO
 
-IF OBJECT_ID('dbo.Look','U') IS NOT NULL
+IF OBJECT_ID('base.Look','U') IS NOT NULL
     BEGIN
-        PRINT 'drop dbo.Look table';
-        DROP TABLE dbo.Look;
+        PRINT 'drop base.Look table';
+        DROP TABLE base.Look;
     END
 GO
 
-IF OBJECT_ID('dbo.LookType','U') IS NOT NULL
+IF OBJECT_ID('base.LookType','U') IS NOT NULL
     BEGIN
-        PRINT 'drop dbo.LookType table';
-        DROP TABLE dbo.LookType;
+        PRINT 'drop base.LookType table';
+        DROP TABLE base.LookType;
     END
 GO
 
@@ -130,6 +180,26 @@ IF OBJECT_ID('DBA.TableLoadStatus','U') IS NOT NULL
     BEGIN
         PRINT 'drop DBA.TableLoadStatus table';
         DROP TABLE DBA.TableLoadStatus;
+    END
+GO
+IF OBJECT_ID('audit.KVStore','U') IS NOT NULL
+    BEGIN
+        PRINT 'drop audit.KVStore table';
+        DROP TABLE audit.KVStore;
+    END
+GO
+
+IF OBJECT_ID('audit.AuditStore','U') IS NOT NULL
+    BEGIN
+        PRINT 'drop audit.AuditStore table';
+        DROP TABLE audit.AuditStore;
+    END
+GO
+
+IF OBJECT_ID('audit.EventSink','U') IS NOT NULL
+    BEGIN
+        PRINT 'drop audit.EventSink table';
+        DROP TABLE audit.EventSink;
     END
 GO
 
@@ -167,3 +237,24 @@ ELSE
             END
     END
 GO 
+
+IF EXISTS (SELECT 1 FROM sys.objects WHERE [schema_id] = SCHEMA_ID('base'))
+    BEGIN
+        PRINT '*** There are still objects referenced by base schema, so schema will not be dropped';
+    END
+ELSE
+    BEGIN
+        IF EXISTS (SELECT 0 FROM sys.schemas s WHERE s.name = 'base' AND schema_id NOT IN (SELECT schema_id FROM sys.objects WHERE name = 'base'))
+            BEGIN
+                PRINT 'dropping base schema';
+                EXEC('DROP SCHEMA [base]');
+            END
+    END
+GO 
+
+IF EXISTS(SELECT 1 FROM sys.fn_listextendedproperty(NULL,NULL,NULL,NULL,NULL,NULL,NULL) WHERE [name] = N'audit version')
+    BEGIN
+        EXEC sys.sp_dropextendedproperty @name = N'audit version';
+    END
+GO
+
